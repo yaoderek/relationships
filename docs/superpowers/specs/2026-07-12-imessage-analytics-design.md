@@ -1,6 +1,6 @@
 # iMessage Analytics Dashboard — Design
 
-**Status: DRAFT — not yet approved.** Written 2026-07-12 from a brainstorming session; pending Derek's review before any implementation planning begins.
+**Status: APPROVED 2026-07-12** (with amendment: group chats added as a first-class dashboard section — see "Group chats" under Dashboard).
 
 ## Purpose
 
@@ -59,6 +59,10 @@ The ingest/analytics boundary is what makes future packaging cheap: a friend's s
 - `GET /api/persons/{id}/stats` — sent/received balance, median & p90 response times both directions, initiation rate, streaks
 - `GET /api/persons/{id}/heatmap` — hour × weekday matrix
 - `GET /api/compare?ids=...` — overlay 2–5 people
+- `GET /api/groups` — group leaderboard: totals, participant count, your share, first/last message
+- `GET /api/groups/{id}/timeseries?bucket=...` — group volume trendline
+- `GET /api/groups/{id}/heatmap` — hour × weekday matrix
+- `GET /api/groups/{id}/stats` — share of voice per member, your participation rate, top tapback givers/receivers, busiest day ever, session counts
 
 DuckDB queried live; no caching layer. Server binds to 127.0.0.1 only.
 
@@ -67,10 +71,13 @@ DuckDB queried live; no caching layer. Server binds to 127.0.0.1 only.
 - **Overview** — total volume over time (sent/received), top-people leaderboard, "relationship arcs" chart of top ~10 people across the years.
 - **Person detail** (core page) — time series with bucket toggle, hour × weekday heatmap, response-time distributions (you vs. them), balance and initiation stats, tapback/emoji favorites, message-length trend.
 - **Compare** — overlay 2–5 people, normalized.
+- **Group chats** — its own section, parallel to people:
+  - **Leaderboard** — groups ranked by volume, with participant count, your share of messages, and recency.
+  - **Group detail** — volume trendline (bucket toggle), hour × weekday heatmap, share-of-voice breakdown (who talks most), your participation rate over time, top tapback givers/receivers, message-length comparison across members, busiest-day callout.
 
-## Judgment call: group chats
+## Judgment call: group chats vs. person metrics
 
-Per-person relationship metrics (response time, initiation, balance) use **1:1 conversations only** by default — in a group chat a fast reply isn't necessarily a reply to you, so including groups corrupts exactly the metrics that matter. Group messages still count in overview volume (tagged), and person pages get an "include group messages" toggle for raw counts only. Tapbacks count separately, never as messages.
+Group chats are a first-class analytics section of their own (above). But per-person *relationship* metrics (response time, initiation, balance) still use **1:1 conversations only** — in a group chat a fast reply isn't necessarily a reply to you, so including groups corrupts exactly the metrics that matter. Group messages count in overview volume (tagged), and person pages get an "include group messages" toggle for raw counts only. Tapbacks count separately, never as messages.
 
 ## Edge cases & error handling
 
@@ -90,5 +97,4 @@ Everything local. Raw copies and the DuckDB live in gitignored `data/`. No messa
 ## Open items
 
 - Full Disk Access grant (blocks any work against real data).
-- Confirm the group-chat judgment call above.
 - Charting library choice (Recharts vs Observable Plot) deferred to implementation.
