@@ -9,6 +9,23 @@ export type PersonSummary = {
   ghosts_by_them: number; ghosts_by_me: number;
   avg_reply_block_me: number | null; avg_reply_block_them: number | null;
   double_texts_me: number; double_texts_them: number;
+  streak_days: number;
+};
+export type PersonTrend = {
+  bucket: string; sent: number; received: number;
+  median_reply_me: number | null; median_reply_them: number | null;
+  texts_per_reply_me: number | null; texts_per_reply_them: number | null;
+  double_texts_me: number; double_texts_them: number;
+  initiation_me: number | null;
+};
+export type SentenceCount = { text: string; count: number };
+export type YouStats = {
+  sent_total: number; avg_chars: number | null; emoji_total: number;
+  sent_in_groups: number; sent_in_dms: number;
+  top_words: WordCount[]; top_sentences: SentenceCount[];
+  top_emojis: EmojiCount[]; reactions_given: TapbackCount[];
+  heatmap: HeatCell[]; busiest_day: { date: string; count: number } | null;
+  avg_texts_per_reply: number | null; double_texts: number;
 };
 export type SeriesPoint = { bucket: string; sent: number; received: number };
 export type HeatCell = { weekday: number; hour: number; count: number };
@@ -75,6 +92,9 @@ export const fetchPersonStats = (id: number) =>
   get<PersonStats>(`/api/persons/${id}/stats`);
 export const fetchPersonHeatmap = (id: number) =>
   get<HeatCell[]>(`/api/persons/${id}/heatmap`);
+export const fetchPersonTrends = (id: number, bucket: Bucket) =>
+  get<PersonTrend[]>(`/api/persons/${id}/trends?bucket=${bucket}`);
+export const fetchYou = () => get<YouStats>("/api/you");
 export const fetchHotDays = (id: number) =>
   get<HotDay[]>(`/api/persons/${id}/hot-days`);
 export const fetchDaySummary = (id: number, date: string) =>

@@ -35,11 +35,11 @@ def test_group_stats(client):
     assert s["session_count"] == 1
     assert s["busiest_day"] == {"date": "2024-06-01", "count": 3}
     by_name = {m["display_name"]: m for m in s["members"]}
-    assert set(by_name) == {"Alice Smith", "Bob Jones", "Me"}
-    assert by_name["Me"]["person_id"] is None
-    assert by_name["Me"]["count"] == 1
-    assert by_name["Me"]["share"] == pytest.approx(1 / 3)
-    assert by_name["Me"]["tapbacks_received"] == 1      # Bob laughed at g8
+    assert set(by_name) == {"Alice Smith", "Bob Jones", "You"}
+    assert by_name["You"]["person_id"] is None
+    assert by_name["You"]["count"] == 1
+    assert by_name["You"]["share"] == pytest.approx(1 / 3)
+    assert by_name["You"]["tapbacks_received"] == 1      # Bob laughed at g8
     assert by_name["Alice Smith"]["tapbacks_received"] == 0
 
 
@@ -76,7 +76,7 @@ def test_group_member_stats_alice(client):
 def test_group_member_stats_me(client):
     gid = _squad_id(client)
     s = client.get(f"/api/groups/{gid}/members/0/stats").json()
-    assert s["display_name"] == "Me"
+    assert s["display_name"] == "You"
     assert s["count"] == 1
     assert s["sessions_ended"] == 1            # "sup squad" ended the session
     assert s["tapbacks_received"] == 1         # Bob laughed at g8

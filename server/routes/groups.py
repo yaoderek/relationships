@@ -73,7 +73,7 @@ def _member_filter(person_id: int) -> tuple[str, list]:
 
 def _require_member(db, chat_id: int, person_id: int) -> str:
     if person_id == 0:
-        return "Me"
+        return "You"
     row = run(db, """
         SELECT p.display_name FROM chat_members cm
         JOIN persons p ON p.person_id = cm.person_id
@@ -191,7 +191,7 @@ def group_stats(chat_id: int, request: Request):
         for pid, disp, cnt, avg in member_rows
     ]
     if me[0]:
-        members.append({"person_id": None, "display_name": "Me", "count": me[0],
+        members.append({"person_id": None, "display_name": "You", "count": me[0],
                         "share": me[0] / total if total else 0.0, "avg_chars": me[1],
                         "tapbacks_received": taps.get(0, 0)})
     members.sort(key=lambda m: m["count"], reverse=True)

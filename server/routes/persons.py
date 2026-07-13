@@ -73,6 +73,19 @@ _LIST_SQL = """
                count(*) FILTER (WHERE double_text = 1 AND is_from_me) AS dt_me,
                count(*) FILTER (WHERE double_text = 1 AND NOT is_from_me) AS dt_them
         FROM flagged GROUP BY 1
+    ),
+    streaks AS (
+        SELECT person_id, count(*) AS streak_days
+        FROM (
+            SELECT person_id, d,
+                   max(d) OVER (PARTITION BY person_id) AS max_d,
+                   row_number() OVER (PARTITION BY person_id ORDER BY d DESC) AS rn
+            FROM (SELECT DISTINCT person_id, date_trunc('day', ts_local) AS d
+                  FROM msgs)
+        )
+        WHERE d = max_d - INTERVAL 1 DAY * (rn - 1)
+          AND max_d >= current_date - INTERVAL 1 DAY
+        GROUP BY 1
     )
     SELECT p.person_id, p.display_name,
            b.total, b.sent, b.received, b.first_ts, b.last_ts,
@@ -80,12 +93,14 @@ _LIST_SQL = """
            s.initiation, s.avg_session_messages, s.avg_session_seconds,
            s.ghosts_by_them, s.ghosts_by_me,
            bl.block_me, bl.block_them,
-           d.dt_me, d.dt_them
+           d.dt_me, d.dt_them,
+           coalesce(st.streak_days, 0) AS streak_days
     FROM persons p
     JOIN base b ON b.person_id = p.person_id
     JOIN sess_agg s ON s.person_id = p.person_id
     JOIN block_agg bl ON bl.person_id = p.person_id
     JOIN dt_agg d ON d.person_id = p.person_id
+    LEFT JOIN streaks st ON st.person_id = p.person_id
     ORDER BY b.total DESC
 """
 
@@ -100,7 +115,7 @@ def list_persons(request: Request):
          "avg_session_seconds": r[11], "ghosts_by_them": r[12],
          "ghosts_by_me": r[13], "avg_reply_block_me": r[14],
          "avg_reply_block_them": r[15], "double_texts_me": r[16],
-         "double_texts_them": r[17]}
+         "double_texts_them": r[17], "streak_days": r[18]}
         for r in run(request.app.state.db_path, _LIST_SQL)
     ]
 
@@ -245,6 +260,93 @@ def person_stats(person_id: int, request: Request):
         "top_emojis_me": emojis(True), "top_emojis_them": emojis(False),
         "tapbacks_from_them": tap_from_them, "tapbacks_from_me": tap_from_me,
     }
+
+
+@router.get("/persons/{person_id}/trends")
+def person_trends(person_id: int, request: Request, bucket: str = "month"):
+    db = request.app.state.db_path
+    b = bucket_expr(bucket, col="ts_local")
+
+    base = run(db, f"""
+        WITH msgs AS (SELECT m.* {_JOIN_1TO1})
+        SELECT {b} AS bucket,
+               count(*) FILTER (WHERE is_from_me) AS sent,
+               count(*) FILTER (WHERE NOT is_from_me) AS received,
+               median(response_seconds) FILTER (WHERE is_from_me) AS reply_me,
+               median(response_seconds) FILTER (WHERE NOT is_from_me) AS reply_them
+        FROM msgs GROUP BY 1""", [person_id])
+
+    blocks = run(db, f"""
+        WITH msgs AS (
+            SELECT m.chat_id, m.session_id, m.ts_utc, m.ts_local, m.is_from_me
+            {_JOIN_1TO1}
+        ),
+        flagged AS (
+            SELECT *,
+                   CASE WHEN lag(is_from_me) OVER w = is_from_me
+                             AND lag(session_id) OVER w = session_id
+                        THEN 0 ELSE 1 END AS new_block,
+                   CASE WHEN lag(is_from_me) OVER w = is_from_me
+                             AND date_diff('second', lag(ts_utc) OVER w, ts_utc) >= 600
+                        THEN 1 ELSE 0 END AS double_text
+            FROM msgs
+            WINDOW w AS (PARTITION BY chat_id ORDER BY ts_utc)
+        ),
+        block_sizes AS (
+            SELECT any_value(is_from_me) AS is_from_me, count(*) AS n,
+                   min(ts_local) AS t0
+            FROM (SELECT *, sum(new_block) OVER (PARTITION BY chat_id ORDER BY ts_utc)
+                         AS block_id
+                  FROM flagged)
+            GROUP BY chat_id, block_id
+        ),
+        block_by_bucket AS (
+            SELECT {bucket_expr(bucket, col="t0")} AS bucket,
+                   avg(n) FILTER (WHERE is_from_me) AS block_me,
+                   avg(n) FILTER (WHERE NOT is_from_me) AS block_them
+            FROM block_sizes GROUP BY 1
+        ),
+        dt_by_bucket AS (
+            SELECT {b} AS bucket,
+                   count(*) FILTER (WHERE double_text = 1 AND is_from_me) AS dt_me,
+                   count(*) FILTER (WHERE double_text = 1 AND NOT is_from_me) AS dt_them
+            FROM flagged GROUP BY 1
+        )
+        SELECT coalesce(bb.bucket, db.bucket), bb.block_me, bb.block_them,
+               db.dt_me, db.dt_them
+        FROM block_by_bucket bb FULL JOIN dt_by_bucket db ON db.bucket = bb.bucket
+        """, [person_id])
+
+    sessions = run(db, f"""
+        WITH sess AS (
+            SELECT m.session_id, min(m.ts_local) AS t0,
+                   arg_min(m.is_from_me, m.ts_utc) AS first_from_me
+            {_JOIN_1TO1}
+            GROUP BY 1)
+        SELECT {bucket_expr(bucket, col="t0")} AS bucket,
+               avg(CASE WHEN first_from_me THEN 1.0 ELSE 0.0 END) AS initiation
+        FROM sess GROUP BY 1""", [person_id])
+
+    out: dict[str, dict] = {}
+    for r in base:
+        out[r[0]] = {"bucket": r[0], "sent": r[1], "received": r[2],
+                     "median_reply_me": r[3], "median_reply_them": r[4],
+                     "texts_per_reply_me": None, "texts_per_reply_them": None,
+                     "double_texts_me": 0, "double_texts_them": 0,
+                     "initiation_me": None}
+    for r in blocks:
+        row = out.setdefault(r[0], {"bucket": r[0], "sent": 0, "received": 0,
+                                    "median_reply_me": None,
+                                    "median_reply_them": None,
+                                    "initiation_me": None})
+        row["texts_per_reply_me"] = r[1]
+        row["texts_per_reply_them"] = r[2]
+        row["double_texts_me"] = r[3] or 0
+        row["double_texts_them"] = r[4] or 0
+    for r in sessions:
+        if r[0] in out:
+            out[r[0]]["initiation_me"] = r[1]
+    return sorted(out.values(), key=lambda x: x["bucket"])
 
 
 @router.get("/persons/{person_id}/hot-days")

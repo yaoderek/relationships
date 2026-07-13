@@ -104,6 +104,21 @@ def test_day_summary_rejects_bad_date(client):
     assert r.status_code == 422
 
 
+def test_person_trends(client):
+    pid = _alice_id(client)
+    trends = client.get(f"/api/persons/{pid}/trends?bucket=day").json()
+    assert [t["bucket"] for t in trends] == ["2024-06-01", "2024-06-02"]
+    jun1, jun2 = trends
+    assert (jun1["sent"], jun1["received"]) == (1, 1)
+    assert jun1["median_reply_me"] == 120.0
+    assert jun1["median_reply_them"] is None
+    assert jun1["texts_per_reply_me"] == 1.0
+    assert jun1["initiation_me"] == 0.0        # she started Jun 1
+    assert jun2["median_reply_them"] == 300.0
+    assert jun2["double_texts_me"] == 1        # "morning" lands in Jun 2
+    assert jun2["initiation_me"] == 1.0
+
+
 def test_person_stats_404(client):
     assert client.get("/api/persons/9999/stats").status_code == 404
 

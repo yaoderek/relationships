@@ -33,7 +33,9 @@ export default function GroupMember() {
               value={`${Math.round(stats.avg_chars ?? 0)} chars`} />
         <Stat label="Left the gc on read"
               value={`${stats.sessions_ghosted.toLocaleString()} of ${stats.sessions_total.toLocaleString()} convos`} />
-        <Stat label="Convos they killed"
+        <Stat label={stats.display_name === "You"
+                     ? "Convos you killed"
+                     : `Convos ${stats.display_name.split(" ")[0]} killed`}
               value={stats.sessions_ended.toLocaleString()} />
         <Stat label="Most common word" value={fav(stats.top_words)} />
         <Stat label="Most common reaction" value={fav(stats.top_reactions_given)} />
