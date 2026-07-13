@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type SpineSection = { id: string; label: string };
 
 export default function Spine({ sections }: { sections: SpineSection[] }) {
   const [active, setActive] = useState(sections[0]?.id);
+  const [slot, setSlot] = useState<Element | null>(null);
+
+  useEffect(() => {
+    setSlot(document.getElementById("spine-slot"));
+  }, []);
 
   useEffect(() => {
     const obs = new IntersectionObserver(
@@ -21,7 +27,8 @@ export default function Spine({ sections }: { sections: SpineSection[] }) {
     return () => obs.disconnect();
   }, [sections]);
 
-  return (
+  if (!slot) return null;
+  return createPortal(
     <nav className="spine" aria-label="Page sections">
       {sections.map((s) => (
         <a key={s.id} href={`#${s.id}`}
@@ -34,6 +41,7 @@ export default function Spine({ sections }: { sections: SpineSection[] }) {
           {s.label}
         </a>
       ))}
-    </nav>
+    </nav>,
+    slot,
   );
 }

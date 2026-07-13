@@ -6,17 +6,24 @@ h1 { font-size: 24px; }
 h2 { font-size: 17px; margin-top: 28px; }
 .dd-option:hover { background: rgba(128, 128, 128, 0.15); }
 .lb-row:hover { background: rgba(128, 128, 128, 0.08); }
+.spine-rail,
+.spine-balance {
+  width: 150px;
+  flex-shrink: 0;
+}
+.spine-rail {
+  position: sticky;
+  top: 90px;
+  align-self: flex-start;
+}
 .spine {
-  position: fixed;
-  left: 20px;
-  top: 110px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-width: 150px;
 }
 .spine a {
   font-size: 12px;
+  line-height: 1.35;
   text-decoration: none;
   opacity: 0.45;
   padding: 4px 10px;
@@ -28,7 +35,9 @@ h2 { font-size: 17px; margin-top: 28px; }
   opacity: 1;
   border-left-color: #5B8FF9;
 }
-@media (max-width: 1360px) { .spine { display: none; } }
+@media (max-width: 1320px) {
+  .spine-rail, .spine-balance { display: none; }
+}
 [id] { scroll-margin-top: 16px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; }
