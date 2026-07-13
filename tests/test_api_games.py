@@ -130,3 +130,24 @@ def test_finish_the_convo_round(games_client):
 
 def test_finish_the_convo_404_on_small_db(client):
     assert client.get("/api/games/finish-the-convo").status_code == 404
+
+
+def test_who_says_it_more_round(games_client):
+    r = games_client.get("/api/games/who-says-it-more")
+    assert r.status_code == 200
+    round_ = r.json()
+    # Only "bruh" qualifies (>= 3 uses by >= 2 friends). Bob: 4/4 msgs,
+    # Dan: 3/5 msgs — Bob has the higher rate.
+    assert round_["word"] == "bruh"
+    choices = round_["choices"]
+    assert len(choices) == 2
+    assert {c["display_name"] for c in choices} == {"Bob", "Dan"}
+    bob = next(c for c in choices if c["display_name"] == "Bob")
+    dan = next(c for c in choices if c["display_name"] == "Dan")
+    assert bob["count"] == 4 and dan["count"] == 3
+    assert bob["per_1k"] > dan["per_1k"]
+    assert round_["answer_person_id"] == bob["person_id"]
+
+
+def test_who_says_it_more_404_on_small_db(client):
+    assert client.get("/api/games/who-says-it-more").status_code == 404

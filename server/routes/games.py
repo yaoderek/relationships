@@ -3,11 +3,14 @@ import random
 from fastapi import APIRouter, HTTPException, Request
 
 from ..db import run
+from ..stopwords import STOPWORDS
 
 router = APIRouter()
 
 _TOP_N = 20
 _ATTEMPTS = 20
+_MIN_WORD_USES = 3
+_MIN_RATE_RATIO = 1.5
 
 
 def _top_persons(db) -> list[tuple[int, str]]:
@@ -145,3 +148,61 @@ def finish_the_convo(request: Request):
                           for t, f, _, _ in aftermath],
         }
     raise HTTPException(404, "not enough message history for this game")
+
+
+@router.get("/games/who-says-it-more")
+def who_says_it_more(request: Request):
+    db = request.app.state.db_path
+    top = _top_persons(db)
+    if len(top) < 2:
+        raise HTTPException(404, "need at least 2 contacts to play")
+    top_names = dict(top)
+    person_ph = ", ".join("?" for _ in top)
+    stop_ph = ", ".join("?" for _ in STOPWORDS)
+    person_ids = [pid for pid, _ in top]
+    rows = run(db, f"""
+        WITH totals AS (
+            SELECT m.person_id, count(*) AS total
+            FROM messages m
+            JOIN chats c ON c.chat_id = m.chat_id AND NOT c.is_group
+            WHERE NOT m.is_from_me AND m.text IS NOT NULL
+                  AND m.person_id IN ({person_ph})
+            GROUP BY 1
+        ),
+        words AS (
+            SELECT m.person_id,
+                   unnest(string_split_regex(
+                       replace(lower(m.text), '’', ''''), '[^a-z'']+')) AS w
+            FROM messages m
+            JOIN chats c ON c.chat_id = m.chat_id AND NOT c.is_group
+            WHERE NOT m.is_from_me AND m.text IS NOT NULL
+                  AND m.person_id IN ({person_ph})
+        )
+        SELECT w.person_id, w.w, count(*) AS c, t.total
+        FROM words w JOIN totals t ON t.person_id = w.person_id
+        WHERE len(w.w) >= 3 AND w.w NOT IN ({stop_ph})
+        GROUP BY 1, 2, 4 HAVING count(*) >= ?""",
+        [*person_ids, *person_ids, *STOPWORDS, _MIN_WORD_USES])
+    by_word: dict[str, list[tuple[int, int, float]]] = {}
+    for person_id, word, count, total in rows:
+        rate = count / total * 1000
+        by_word.setdefault(word, []).append((person_id, count, rate))
+    playable = {w: users for w, users in by_word.items() if len(users) >= 2}
+    if not playable:
+        raise HTTPException(404, "not enough shared vocabulary for this game")
+    for _ in range(_ATTEMPTS):
+        word = random.choice(sorted(playable))
+        a, b = random.sample(playable[word], 2)
+        low, high = sorted((a, b), key=lambda u: u[2])
+        if low[2] <= 0 or high[2] / low[2] < _MIN_RATE_RATIO:
+            continue
+        choices = [{"person_id": pid, "display_name": top_names[pid],
+                    "count": count, "per_1k": round(rate, 1)}
+                   for pid, count, rate in (a, b)]
+        random.shuffle(choices)
+        return {
+            "word": word,
+            "choices": choices,
+            "answer_person_id": high[0],
+        }
+    raise HTTPException(404, "no word with meaningfully different usage found")
