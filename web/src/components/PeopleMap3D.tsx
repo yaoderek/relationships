@@ -75,6 +75,8 @@ export default function PeopleMap3D() {
     let raf = 0;
 
     const draw = () => {
+      // Schedule first so a bad frame can never kill the loop.
+      raf = requestAnimationFrame(draw);
       const rot = rotRef.current;
       if (rot.auto && !dragRef.current) rot.yaw += 0.0022;
       const cy = Math.cos(rot.yaw), sy = Math.sin(rot.yaw);
@@ -87,7 +89,9 @@ export default function PeopleMap3D() {
         const z1 = -x * sy + z * cy;
         const y2 = y * cp - z1 * sp;
         const z2 = y * sp + z1 * cp;
-        const scale = FOV / (FOV + z2);
+        // Clamp the divisor: points swinging behind the camera would flip the
+        // scale negative and crash ctx.arc with a negative radius.
+        const scale = FOV / Math.max(0.8, FOV + z2);
         return { sx: W / 2 + x1 * scale * 160,
                  sy: H / 2 + y2 * scale * 160, scale };
       };
@@ -131,18 +135,12 @@ export default function PeopleMap3D() {
         n.z += (n.tz - n.z) * LERP;
         n.alpha += (n.targetAlpha - n.alpha) * LERP;
         if (n.alpha < 0.02) continue;
-        // rotate around Y then X
-        const x1 = n.x * cy + n.z * sy;
-        const z1 = -n.x * sy + n.z * cy;
-        const y2 = n.y * cp - z1 * sp;
-        const z2 = n.y * sp + z1 * cp;
-        const scale = FOV / (FOV + z2);
-        drawable.push({ n, sx: W / 2 + x1 * scale * 160,
-                        sy: H / 2 + y2 * scale * 160, scale });
+        const p = project(n.x, n.y, n.z);
+        drawable.push({ n, sx: p.sx, sy: p.sy, scale: p.scale });
       }
       drawable.sort((a, b) => a.scale - b.scale);  // paint far points first
       for (const d of drawable) {
-        const r = Math.max(4, Math.sqrt(d.n.msgs) / 9) * d.scale;
+        const r = Math.max(1, Math.max(4, Math.sqrt(d.n.msgs) / 9) * d.scale);
         ctx.globalAlpha = d.n.alpha * Math.min(1, 0.35 + d.scale * 0.6);
         ctx.fillStyle = CLUSTER_PALETTE[d.n.cluster % CLUSTER_PALETTE.length];
         ctx.beginPath();
@@ -153,7 +151,6 @@ export default function PeopleMap3D() {
         ctx.fillText(d.n.name.split(" ")[0], d.sx + r + 3, d.sy + 3);
       }
       ctx.globalAlpha = 1;
-      raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
@@ -181,7 +178,7 @@ export default function PeopleMap3D() {
       const z1 = -n.x * sy + n.z * cy;
       const y2 = n.y * cp - z1 * sp;
       const z2 = n.y * sp + z1 * cp;
-      const scale = FOV / (FOV + z2);
+      const scale = FOV / Math.max(0.8, FOV + z2);
       const sx = W / 2 + x1 * scale * 160;
       const syy = H / 2 + y2 * scale * 160;
       const d = Math.hypot(mx - sx, my - syy);
