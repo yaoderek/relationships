@@ -1,11 +1,14 @@
 import re
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from ..db import run
+from ..llm import summarize_you_day
 from ..stopwords import STOPWORDS
 
 router = APIRouter()
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 @router.get("/you/word-context")
@@ -106,6 +109,50 @@ def you_hot_days(request: Request, limit: int = 10):
         ORDER BY days.c DESC, days.day""", [limit])
     return [{"date": r[0], "count": r[1], "sent": r[2], "top_contact": r[3]}
             for r in rows]
+
+
+@router.get("/you/day-summary")
+def you_day_summary(date: str, request: Request):
+    if not _DATE_RE.match(date):
+        raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD")
+    rows = run(request.app.state.db_path, """
+        SELECT m.chat_id, c.is_group, c.name,
+               strftime(m.ts_local, '%H:%M') AS hm, m.is_from_me,
+               p.display_name, m.text
+        FROM messages m
+        JOIN chats c ON c.chat_id = m.chat_id
+        LEFT JOIN persons p ON p.person_id = m.person_id
+        WHERE strftime(date_trunc('day', m.ts_local), '%Y-%m-%d') = ?
+              AND m.text IS NOT NULL
+        ORDER BY m.ts_local""", [date])
+    if not rows:
+        raise HTTPException(status_code=404, detail="no messages on that day")
+
+    chats: dict[int, dict] = {}
+    for chat_id, is_group, chat_name, hm, from_me, sender, text in rows:
+        chat = chats.setdefault(chat_id, {
+            "is_group": is_group, "name": chat_name,
+            "counterpart": None, "lines": [],
+        })
+        if not is_group and sender:
+            chat["counterpart"] = sender
+        label = "You" if from_me else (sender or "Someone")
+        if len(chat["lines"]) < 80:
+            chat["lines"].append(f"{hm} {label}: {text[:200]}")
+
+    parts = []
+    busiest_first = sorted(chats.values(), key=lambda ch: len(ch["lines"]),
+                           reverse=True)
+    for chat in busiest_first[:8]:
+        if chat["is_group"]:
+            header = f"— Group chat: {chat['name'] or 'unnamed'} —"
+        else:
+            header = f"— Conversation with {chat['counterpart'] or 'unknown'} —"
+        parts.append(header + "\n" + "\n".join(chat["lines"]))
+    transcript = "\n\n".join(parts)[:16000]
+
+    result = summarize_you_day(f"you:{date}", date, transcript)
+    return {"date": date, **result}
 
 
 @router.get("/you")

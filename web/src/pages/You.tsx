@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { fetchCatchphrasesTimeline, fetchWordContext, fetchYou, fetchYouHotDays } from "../api";
+import { fetchCatchphrasesTimeline, fetchWordContext, fetchYou } from "../api";
 import type { SentenceCount } from "../api";
 import BlobField from "../components/BlobField";
 import CalendarHeatmap from "../components/CalendarHeatmap";
 import Heatmap from "../components/Heatmap";
 import Spine from "../components/Spine";
 import { Stat, statGridStyle } from "../components/StatGrid";
+import YouHotDays from "../components/YouHotDays";
 import { useFetch } from "../lib/useFetch";
 
 const SECTIONS = [
@@ -21,7 +22,6 @@ const SECTIONS = [
 export default function You() {
   const stats = useFetch(fetchYou, []);
   const evolution = useFetch(fetchCatchphrasesTimeline, []);
-  const hotDays = useFetch(fetchYouHotDays, []);
   const [word, setWord] = useState<string | null>(null);
   const [sentences, setSentences] = useState<SentenceCount[] | null>(null);
 
@@ -35,8 +35,6 @@ export default function You() {
     setSentences(null);
     fetchWordContext(w).then(setSentences).catch(() => setSentences([]));
   };
-
-  const maxHot = Math.max(1, ...(hotDays ?? []).map((d) => d.count));
 
   return (
     <>
@@ -165,26 +163,10 @@ export default function You() {
       <CalendarHeatmap />
 
       <h2 id="you-busiest">Busiest days ever</h2>
-      {(hotDays ?? []).map((d) => (
-        <div key={d.date}
-             style={{ display: "flex", alignItems: "center", gap: 12,
-                      padding: "7px 8px", fontSize: 14,
-                      borderBottom: "1px solid rgba(128,128,128,0.15)" }}>
-          <span style={{ fontVariantNumeric: "tabular-nums", width: 90 }}>
-            {d.date}
-          </span>
-          <span style={{ flex: 1 }}>
-            <span style={{ display: "block", background: "#5B8FF9", height: 7,
-                           borderRadius: 4,
-                           width: `${(d.count / maxHot) * 100}%` }} />
-          </span>
-          <span style={{ fontSize: 12, opacity: 0.65, width: 220,
-                         textAlign: "right" }}>
-            {d.count.toLocaleString()} msgs · {d.sent.toLocaleString()} sent
-            {d.top_contact ? ` · mostly ${d.top_contact}` : ""}
-          </span>
-        </div>
-      ))}
+      <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
+        Click a day to see what was going on.
+      </p>
+      <YouHotDays />
     </>
   );
 }

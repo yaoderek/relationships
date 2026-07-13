@@ -441,6 +441,7 @@ def person_heatmap(person_id: int, request: Request):
 
 @router.get("/compare")
 def compare(ids: str, request: Request, bucket: str = "month"):
+    """Multi-person series; used by the Overview relationship-arcs chart."""
     db = request.app.state.db_path
     out = []
     for pid in [int(x) for x in ids.split(",") if x.strip()]:
@@ -454,3 +455,5 @@ def compare(ids: str, request: Request, bucket: str = "month"):
         out.append({"person_id": pid, "display_name": name[0][0],
                     "series": [{"bucket": r[0], "total": r[1]} for r in series]})
     return out
+
+

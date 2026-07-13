@@ -151,6 +151,12 @@ export type YouHotDay = {
   date: string; count: number; sent: number; top_contact: string | null;
 };
 export const fetchYouHotDays = () => get<YouHotDay[]>("/api/you/hot-days");
+export type YouDaySummary = {
+  date: string; summary: string; sentiment: string | null;
+  quotes: { speaker: string; text: string }[];
+};
+export const fetchYouDaySummary = (date: string) =>
+  get<YouDaySummary>(`/api/you/day-summary?date=${date}`);
 export const fetchHotDays = (id: number) =>
   get<HotDay[]>(`/api/persons/${id}/hot-days`);
 export const fetchDaySummary = (id: number, date: string) =>

@@ -49,6 +49,22 @@ def test_you_hot_days(client):
                        "top_contact": "Alice Smith"}
 
 
+def test_you_day_summary_requires_key(client, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    r = client.get("/api/you/day-summary?date=2024-06-01")
+    assert r.status_code == 503
+
+
+def test_you_day_summary_rejects_bad_date(client):
+    r = client.get("/api/you/day-summary?date=junk")
+    assert r.status_code == 422
+
+
+def test_you_day_summary_404_when_no_messages(client):
+    r = client.get("/api/you/day-summary?date=2020-01-01")
+    assert r.status_code == 404
+
+
 def test_persons_have_streaks(client):
     people = client.get("/api/persons").json()
     alice = next(p for p in people if p["display_name"] == "Alice Smith")

@@ -19,6 +19,19 @@ _SYSTEM_PROMPT = (
     'and the mood", "sentiment": "one or two words, e.g. warm, playful, tense, '
     'flirty, logistical"}. Be specific but concise; never invent details.'
 )
+_YOU_DAY_PROMPT = (
+    "You summarize one day of the reader's text messages across several "
+    "conversations. Their messages are labeled 'You'; everyone else is "
+    "labeled by name, and each conversation is introduced with a header "
+    "line. Address the reader in the second person as 'you' and refer to "
+    "others by the exact names in the labels. Reply with JSON: "
+    '{"summary": "3-5 sentences: what was happening that day across the '
+    'conversations, the main topics, and the mood", "sentiment": "one or '
+    'two words", "quotes": [3-5 standout messages copied VERBATIM from the '
+    'transcript, each as {"speaker": "name or You", "text": "the message"} '
+    "— pick funny, dramatic, or memorable ones]}. Never invent details or "
+    "alter quotes."
+)
 
 
 def load_env_file(path: Path | None = None) -> None:
@@ -44,12 +57,7 @@ def _write_cache(cache: dict) -> None:
     _CACHE_PATH.write_text(json.dumps(cache, ensure_ascii=False, indent=1))
 
 
-def summarize_day(cache_key: str, person_name: str, day: str,
-                  transcript: str) -> dict:
-    cache = _read_cache()
-    if cache_key in cache:
-        return cache[cache_key]
-
+def _complete_json(cache_key: str, system_prompt: str, user_content: str) -> str:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=503,
@@ -58,10 +66,8 @@ def summarize_day(cache_key: str, person_name: str, day: str,
     payload = {
         "model": os.environ.get("OPENAI_MODEL", "gpt-5-nano"),
         "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user",
-             "content": f"Conversation between You and {person_name} on {day}:\n\n"
-                        f"{transcript}"},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
         ],
         "response_format": {"type": "json_object"},
     }
@@ -80,14 +86,49 @@ def summarize_day(cache_key: str, person_name: str, day: str,
                        resp.status_code, cache_key)
         raise HTTPException(status_code=502,
                             detail=f"OpenAI error {resp.status_code}")
+    return resp.json()["choices"][0]["message"]["content"]
 
-    content = resp.json()["choices"][0]["message"]["content"]
+
+def summarize_day(cache_key: str, person_name: str, day: str,
+                  transcript: str) -> dict:
+    cache = _read_cache()
+    if cache_key in cache:
+        return cache[cache_key]
+
+    content = _complete_json(
+        cache_key, _SYSTEM_PROMPT,
+        f"Conversation between You and {person_name} on {day}:\n\n{transcript}")
     try:
         parsed = json.loads(content)
         result = {"summary": str(parsed.get("summary", content)),
                   "sentiment": parsed.get("sentiment")}
     except (json.JSONDecodeError, AttributeError):
         result = {"summary": content, "sentiment": None}
+
+    cache[cache_key] = result
+    _write_cache(cache)
+    return result
+
+
+def summarize_you_day(cache_key: str, day: str, transcript: str) -> dict:
+    cache = _read_cache()
+    if cache_key in cache:
+        return cache[cache_key]
+
+    content = _complete_json(
+        cache_key, _YOU_DAY_PROMPT,
+        f"Your messages across conversations on {day}:\n\n{transcript}")
+    try:
+        parsed = json.loads(content)
+        quotes = [
+            {"speaker": str(q.get("speaker", "")), "text": str(q.get("text", ""))}
+            for q in parsed.get("quotes", []) if isinstance(q, dict)
+        ]
+        result = {"summary": str(parsed.get("summary", content)),
+                  "sentiment": parsed.get("sentiment"),
+                  "quotes": quotes}
+    except (json.JSONDecodeError, AttributeError):
+        result = {"summary": content, "sentiment": None, "quotes": []}
 
     cache[cache_key] = result
     _write_cache(cache)
