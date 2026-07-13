@@ -1,0 +1,6 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; }
+a { color: inherit; }
+button { cursor: pointer; }
+h1 { font-size: 24px; }
+h2 { font-size: 17px; margin-top: 28px; }
