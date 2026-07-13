@@ -14,6 +14,14 @@ def test_persons_time_window(client):
     assert client.get("/api/persons?days=30").json() == []
 
 
+def test_persons_timeline(client):
+    rows = client.get("/api/persons/timeline").json()
+    alice = [r for r in rows if r["display_name"] == "Alice Smith"]
+    assert alice == [{"bucket": "2024-06", "person_id": alice[0]["person_id"],
+                      "display_name": "Alice Smith", "count": 4}]
+    assert sum(r["count"] for r in rows) == 5   # 4 Alice + 1 Bob, 1:1 only
+
+
 def test_persons_leaderboard_metrics(client):
     people = client.get("/api/persons").json()
     alice = next(p for p in people if p["display_name"] == "Alice Smith")

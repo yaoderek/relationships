@@ -1,4 +1,5 @@
 import { fetchYou } from "../api";
+import BlobField from "../components/BlobField";
 import Heatmap from "../components/Heatmap";
 import { Stat, statGridStyle } from "../components/StatGrid";
 import { useFetch } from "../lib/useFetch";
@@ -32,6 +33,12 @@ export default function You() {
                 value={`${stats.busiest_day.date} (${stats.busiest_day.count})`} />
         )}
       </div>
+      <h2>Your universe</h2>
+      <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
+        Each blob is a person, sized by how much you texted around that moment.
+        Drag the timeline or press play.
+      </p>
+      <BlobField />
       <h2>Your vernacular</h2>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {stats.top_words.map((w) => (

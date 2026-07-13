@@ -132,6 +132,32 @@ _JOIN_1TO1 = """
 """
 
 
+@router.get("/persons/timeline")
+def persons_timeline(request: Request, top: int = 40):
+    sql = """
+        WITH totals AS (
+            SELECT cm.person_id, count(*) AS total
+            FROM messages m
+            JOIN chats c ON c.chat_id = m.chat_id AND NOT c.is_group
+            JOIN chat_members cm ON cm.chat_id = m.chat_id
+            GROUP BY 1 ORDER BY total DESC LIMIT ?
+        )
+        SELECT strftime(date_trunc('month', m.ts_local), '%Y-%m') AS bucket,
+               p.person_id, p.display_name, count(*) AS c
+        FROM messages m
+        JOIN chats c ON c.chat_id = m.chat_id AND NOT c.is_group
+        JOIN chat_members cm ON cm.chat_id = m.chat_id
+        JOIN totals t ON t.person_id = cm.person_id
+        JOIN persons p ON p.person_id = cm.person_id
+        WHERE p.display_name NOT LIKE 'urn:%'
+        GROUP BY 1, 2, 3
+        ORDER BY 1, 4 DESC
+    """
+    return [{"bucket": r[0], "person_id": r[1], "display_name": r[2],
+             "count": r[3]}
+            for r in run(request.app.state.db_path, sql, [top])]
+
+
 @router.get("/persons/{person_id}/timeseries")
 def person_timeseries(person_id: int, request: Request, bucket: str = "week",
                       include_groups: bool = False):

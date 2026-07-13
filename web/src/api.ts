@@ -96,6 +96,11 @@ export const fetchPersonHeatmap = (id: number) =>
 export const fetchPersonTrends = (id: number, bucket: Bucket) =>
   get<PersonTrend[]>(`/api/persons/${id}/trends?bucket=${bucket}`);
 export const fetchYou = () => get<YouStats>("/api/you");
+export type TimelinePoint = {
+  bucket: string; person_id: number; display_name: string; count: number;
+};
+export const fetchPersonsTimeline = () =>
+  get<TimelinePoint[]>("/api/persons/timeline");
 export const fetchHotDays = (id: number) =>
   get<HotDay[]>(`/api/persons/${id}/hot-days`);
 export const fetchDaySummary = (id: number, date: string) =>

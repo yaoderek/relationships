@@ -11,12 +11,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "d3-force": "^3.0.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
     "recharts": "^3.9.2"
   },
   "devDependencies": {
+    "@types/d3-force": "^3.0.10",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
