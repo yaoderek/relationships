@@ -192,6 +192,11 @@ export type WhoSaysItMoreChoice = {
 export type WhoSaysItMoreRound = {
   word: string; choices: WhoSaysItMoreChoice[]; answer_person_id: number;
 };
+export type GroupChatChoice = { chat_id: number; name: string };
+export type WhichGroupChatRound = {
+  messages: GameMessage[]; choices: GroupChatChoice[];
+  answer_chat_id: number; date: string;
+};
 
 async function getOrNull<T>(url: string): Promise<T | null> {
   const res = await fetch(url);
@@ -206,3 +211,5 @@ export const fetchFinishConvo = () =>
   getOrNull<FinishConvoRound>("/api/games/finish-the-convo");
 export const fetchWhoSaysItMore = () =>
   getOrNull<WhoSaysItMoreRound>("/api/games/who-says-it-more");
+export const fetchWhichGroupChat = () =>
+  getOrNull<WhichGroupChatRound>("/api/games/which-group-chat");

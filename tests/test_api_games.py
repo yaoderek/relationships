@@ -69,13 +69,36 @@ def games_client(tmp_path_factory) -> TestClient:
          "handle_id": 4, "chat_id": 4, "date": _t(3, 9, 4)},
         {"msg_id": 19, "guid": "g19", "text": "let me check and text back",
          "handle_id": 4, "chat_id": 4, "date": _t(3, 9, 5)},
+        # Group "the squad" (chat 5) — the only group with a full session.
+        # My message is kept short so it can't enter the finish-the-convo
+        # distractor pool (needs len >= 15 there).
+        {"msg_id": 23, "guid": "g23", "text": "yo who is down for tonight",
+         "handle_id": 1, "chat_id": 5, "date": _t(5, 15, 0)},
+        {"msg_id": 24, "guid": "g24", "text": "i am if we go late",
+         "handle_id": 2, "chat_id": 5, "date": _t(5, 15, 1)},
+        {"msg_id": 25, "guid": "g25", "text": "im in",
+         "handle_id": 0, "chat_id": 5, "date": _t(5, 15, 2), "is_from_me": 1},
+        {"msg_id": 26, "guid": "g26", "text": "ok picking everyone up at nine",
+         "handle_id": 1, "chat_id": 5, "date": _t(5, 15, 3)},
+        {"msg_id": 27, "guid": "g27", "text": "bring the aux cord",
+         "handle_id": 2, "chat_id": 5, "date": _t(5, 15, 4)},
+        # Other named groups — distractor choices only (one message each).
+        {"msg_id": 28, "guid": "g28", "text": "leg day tomorrow",
+         "handle_id": 3, "chat_id": 6, "date": _t(6, 8, 0)},
+        {"msg_id": 29, "guid": "g29", "text": "dinner sunday",
+         "handle_id": 4, "chat_id": 7, "date": _t(6, 9, 0)},
+        {"msg_id": 30, "guid": "g30", "text": "rent is due",
+         "handle_id": 3, "chat_id": 8, "date": _t(6, 10, 0)},
     ]
     make_chat_db(
         chat,
         handles=[(1, "+15551230001", "iMessage"), (2, "+15551230002", "iMessage"),
                  (3, "+15551230003", "iMessage"), (4, "+15551230004", "iMessage")],
-        chats=[(1, None, 45), (2, None, 45), (3, None, 45), (4, None, 45)],
-        chat_handles=[(1, 1), (2, 2), (3, 3), (4, 4)],
+        chats=[(1, None, 45), (2, None, 45), (3, None, 45), (4, None, 45),
+               (5, "the squad", 43), (6, "gym rats", 43), (7, "family", 43),
+               (8, "roommates", 43)],
+        chat_handles=[(1, 1), (2, 2), (3, 3), (4, 4),
+                      (5, 1), (5, 2), (6, 3), (7, 4), (8, 3)],
         messages=msgs,
     )
     out = tmp / "analytics.duckdb"
@@ -151,3 +174,26 @@ def test_who_says_it_more_round(games_client):
 
 def test_who_says_it_more_404_on_small_db(client):
     assert client.get("/api/games/who-says-it-more").status_code == 404
+
+
+def test_which_group_chat_round(games_client):
+    r = games_client.get("/api/games/which-group-chat")
+    assert r.status_code == 200
+    round_ = r.json()
+    msgs = round_["messages"]
+    assert 4 <= len(msgs) <= 6
+    assert all(set(m) == {"text", "is_from_me"} for m in msgs)
+    choices = round_["choices"]
+    assert len(choices) == 4
+    assert len({c["chat_id"] for c in choices}) == 4
+    assert {c["name"] for c in choices} == {"the squad", "gym rats",
+                                            "family", "roommates"}
+    # only "the squad" has a session with >= 4 messages
+    answer = next(c for c in choices if c["chat_id"] == round_["answer_chat_id"])
+    assert answer["name"] == "the squad"
+    assert round_["date"] == "2024-06-05"
+
+
+def test_which_group_chat_404_on_small_db(client):
+    # conftest fixture has a single named group (< 4 needed for choices)
+    assert client.get("/api/games/which-group-chat").status_code == 404

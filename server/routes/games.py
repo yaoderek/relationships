@@ -150,6 +150,52 @@ def finish_the_convo(request: Request):
     raise HTTPException(404, "not enough message history for this game")
 
 
+@router.get("/games/which-group-chat")
+def which_group_chat(request: Request):
+    db = request.app.state.db_path
+    groups = run(db, """
+        SELECT c.chat_id, c.name, count(*) AS cnt
+        FROM messages m
+        JOIN chats c ON c.chat_id = m.chat_id AND c.is_group
+        WHERE m.text IS NOT NULL
+              AND c.name IS NOT NULL AND len(trim(c.name)) > 0
+        GROUP BY 1, 2
+        ORDER BY cnt DESC, c.chat_id
+        LIMIT ?""", [_TOP_N])
+    if len(groups) < 4:
+        raise HTTPException(404, "need at least 4 named group chats to play")
+    for _ in range(_ATTEMPTS):
+        chat_id, name, _cnt = random.choice(groups)
+        sessions = run(db, """
+            SELECT session_id FROM messages
+            WHERE chat_id = ? AND text IS NOT NULL
+            GROUP BY 1 HAVING count(*) >= 4""", [chat_id])
+        if not sessions:
+            continue
+        session_id = random.choice(sessions)[0]
+        msgs = run(db, """
+            SELECT trim(text), is_from_me,
+                   strftime(date_trunc('day', ts_local), '%Y-%m-%d')
+            FROM messages
+            WHERE chat_id = ? AND session_id = ? AND text IS NOT NULL
+            ORDER BY ts_utc""", [chat_id, session_id])
+        size = min(6, len(msgs))
+        start = random.randrange(len(msgs) - size + 1)
+        window = msgs[start:start + size]
+        others = random.sample([g for g in groups if g[0] != chat_id], 3)
+        choices = [{"chat_id": cid, "name": n}
+                   for cid, n, _ in [*others, (chat_id, name, 0)]]
+        random.shuffle(choices)
+        return {
+            "messages": [{"text": t, "is_from_me": bool(f)}
+                         for t, f, _ in window],
+            "choices": choices,
+            "answer_chat_id": chat_id,
+            "date": window[0][2],
+        }
+    raise HTTPException(404, "not enough group chat history for this game")
+
+
 @router.get("/games/who-says-it-more")
 def who_says_it_more(request: Request):
     db = request.app.state.db_path

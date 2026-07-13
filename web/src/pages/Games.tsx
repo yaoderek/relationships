@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
 import {
-  fetchFinishConvo, fetchWhoSaidIt, fetchWhoSaysItMore,
+  fetchFinishConvo, fetchWhichGroupChat, fetchWhoSaidIt, fetchWhoSaysItMore,
 } from "../api";
 import type {
-  FinishConvoRound, GameMessage, WhoSaidItRound, WhoSaysItMoreRound,
+  FinishConvoRound, GameMessage, WhichGroupChatRound, WhoSaidItRound,
+  WhoSaysItMoreRound,
 } from "../api";
 import Dropdown from "../components/Dropdown";
 
-type GameId = "who-said-it" | "finish-the-convo" | "who-says-it-more";
+type GameId = "who-said-it" | "finish-the-convo" | "which-group-chat"
+  | "who-says-it-more";
 
 const GAMES: { id: GameId; label: string }[] = [
   { id: "who-said-it", label: "Who Said It" },
   { id: "finish-the-convo", label: "Finish the Convo" },
+  { id: "which-group-chat", label: "Which Group Chat" },
   { id: "who-says-it-more", label: "Who Says It More" },
 ];
 
@@ -158,6 +161,47 @@ function FinishConvo({ onResult }: { onResult: (ok: boolean) => void }) {
   );
 }
 
+function WhichGroupChat({ onResult }: { onResult: (ok: boolean) => void }) {
+  const { round, next } = useRound<WhichGroupChatRound>(fetchWhichGroupChat);
+  const [picked, setPicked] = useState<number | null>(null);
+  useEffect(() => setPicked(null), [round]);
+  if (round === undefined) return LOADING;
+  if (round === null) return NO_DATA;
+  const pick = (id: number) => {
+    if (picked !== null) return;
+    setPicked(id);
+    onResult(id === round.answer_chat_id);
+  };
+  const answer = round.choices.find(
+    (c) => c.chat_id === round.answer_chat_id);
+  return (
+    <div className="game-round">
+      <p>Which group chat is this from?</p>
+      <div style={{ margin: "16px 0" }}>
+        {round.messages.map((m, i) => <Bubble key={i} m={m} />)}
+      </div>
+      {round.choices.map((c) => {
+        const state: ChoiceState = picked === null ? "idle"
+          : c.chat_id === round.answer_chat_id ? "correct"
+          : c.chat_id === picked ? "wrong" : "dim";
+        return (
+          <button key={c.chat_id} style={choiceStyle(state)}
+                  className={choiceClass(state)}
+                  onClick={() => pick(c.chat_id)}>
+            {c.name}
+          </button>
+        );
+      })}
+      {picked !== null && (
+        <div className="game-reveal" style={{ marginTop: 12 }}>
+          <p>It was <b>{answer?.name}</b> — {round.date}.</p>
+          <NextButton onClick={next} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WhoSaysItMore({ onResult }: { onResult: (ok: boolean) => void }) {
   const { round, next } = useRound<WhoSaysItMoreRound>(fetchWhoSaysItMore);
   const [picked, setPicked] = useState<number | null>(null);
@@ -228,6 +272,7 @@ export default function Games() {
       <div style={{ maxWidth: 560 }}>
         {game === "who-said-it" && <WhoSaidIt onResult={onResult} />}
         {game === "finish-the-convo" && <FinishConvo onResult={onResult} />}
+        {game === "which-group-chat" && <WhichGroupChat onResult={onResult} />}
         {game === "who-says-it-more" && <WhoSaysItMore onResult={onResult} />}
       </div>
     </>
