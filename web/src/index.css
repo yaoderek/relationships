@@ -10,7 +10,8 @@ h2 { font-size: 17px; margin-top: 28px; }
   max-width: 70%;
   padding: 8px 12px;
   border-radius: 16px;
-  margin-bottom: 6px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .bubble-me { background: light-dark(#007aff, #0a84ff); color: #fff; }
 .bubble-them {

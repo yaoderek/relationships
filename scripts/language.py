@@ -243,10 +243,14 @@ def main(people_only: bool = False) -> None:
             label = label_cluster(members[:30], api_key)
             share = cluster_msg_count[cid] / total_msgs
             cluster_rows.append((cid, label, cluster_msg_count[cid], share))
-            cluster_total = sum(cluster_person[cid].values()) or 1
+            # Share of the WHOLE cluster, not just the named-contact slice —
+            # otherwise clusters dominated by unnamed senders (bank alerts,
+            # short codes) show real friends with huge phantom percentages.
+            cluster_total = cluster_msg_count[cid] or 1
             for pid, n in cluster_person[cid].most_common(3):
-                cluster_people_rows.append(
-                    (cid, person_names[pid], n / cluster_total))
+                if n / cluster_total >= 0.03:
+                    cluster_people_rows.append(
+                        (cid, person_names[pid], n / cluster_total))
             print(f"  cluster {cid}: {label} ({share:.0%})")
 
         # ---- voice metrics ----

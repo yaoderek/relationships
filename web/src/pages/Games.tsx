@@ -31,14 +31,27 @@ function useRound<T>(fetcher: () => Promise<T | null>) {
   return { round, next: () => setNonce((n) => n + 1) };
 }
 
-function Bubble({ m }: { m: GameMessage }) {
+function Bubble({ m, gap }: { m: GameMessage; gap: number }) {
   return (
-    <div style={{ display: "flex",
+    <div style={{ display: "flex", marginBottom: gap,
                   justifyContent: m.is_from_me ? "flex-end" : "flex-start" }}>
       <div className={`bubble ${m.is_from_me ? "bubble-me" : "bubble-them"}`}>
         {m.text}
       </div>
     </div>
+  );
+}
+
+// iMessage-style rhythm: same sender stays tight, sender change gets air.
+function Bubbles({ messages }: { messages: GameMessage[] }) {
+  return (
+    <>
+      {messages.map((m, i) => {
+        const next = messages[i + 1];
+        const gap = next && next.is_from_me === m.is_from_me ? 3 : 10;
+        return <Bubble key={i} m={m} gap={gap} />;
+      })}
+    </>
   );
 }
 
@@ -97,7 +110,7 @@ function WhoSaidIt({ onResult }: { onResult: (ok: boolean) => void }) {
     <div className="game-round">
       <p>Who are you texting with here?</p>
       <div style={{ margin: "16px 0" }}>
-        {round.messages.map((m, i) => <Bubble key={i} m={m} />)}
+        <Bubbles messages={round.messages} />
       </div>
       {round.choices.map((c) => {
         const state: ChoiceState = picked === null ? "idle"
@@ -136,7 +149,7 @@ function FinishConvo({ onResult }: { onResult: (ok: boolean) => void }) {
     <div className="game-round">
       <p>What did you actually say next?</p>
       <div style={{ margin: "16px 0" }}>
-        {round.context.map((m, i) => <Bubble key={i} m={m} />)}
+        <Bubbles messages={round.context} />
       </div>
       {round.options.map((o, i) => {
         const state: ChoiceState = picked === null ? "idle"
@@ -153,7 +166,7 @@ function FinishConvo({ onResult }: { onResult: (ok: boolean) => void }) {
         <div className="game-reveal" style={{ marginTop: 12 }}>
           <p>That was <b>{round.person_name}</b> — {round.date}.
              {round.aftermath.length > 0 && " And then:"}</p>
-          {round.aftermath.map((m, i) => <Bubble key={i} m={m} />)}
+          <Bubbles messages={round.aftermath} />
           <NextButton onClick={next} />
         </div>
       )}
@@ -178,7 +191,7 @@ function WhichGroupChat({ onResult }: { onResult: (ok: boolean) => void }) {
     <div className="game-round">
       <p>Which group chat is this from?</p>
       <div style={{ margin: "16px 0" }}>
-        {round.messages.map((m, i) => <Bubble key={i} m={m} />)}
+        <Bubbles messages={round.messages} />
       </div>
       {round.choices.map((c) => {
         const state: ChoiceState = picked === null ? "idle"
