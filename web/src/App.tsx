@@ -1,5 +1,7 @@
 import { Link, Route, Routes } from "react-router-dom";
 import Compare from "./pages/Compare";
+import GroupDetail from "./pages/GroupDetail";
+import Groups from "./pages/Groups";
 import Overview from "./pages/Overview";
 import Person from "./pages/Person";
 
@@ -15,8 +17,8 @@ export default function App() {
         <Route path="/" element={<Overview />} />
         <Route path="/person/:id" element={<Person />} />
         <Route path="/compare" element={<Compare />} />
-        <Route path="/groups" element={<p>Groups — Task 16</p>} />
-        <Route path="/groups/:id" element={<p>Group detail — Task 16</p>} />
+        <Route path="/groups" element={<Groups />} />
+        <Route path="/groups/:id" element={<GroupDetail />} />
       </Routes>
     </div>
   );
