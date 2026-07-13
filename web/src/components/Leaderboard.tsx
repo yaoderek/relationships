@@ -1,10 +1,34 @@
 export type LeaderboardRow = {
   key: number; name: string; total: number; subtitle: string;
   display?: string;
+  badge?: "fire" | "moon";
+  badgeTitle?: string;
 };
 
 const ROW_H = 56;
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+function Badge({ kind, title }: { kind?: "fire" | "moon"; title?: string }) {
+  if (kind === "fire") {
+    return (
+      <svg width="11" height="11" viewBox="0 0 24 24" aria-label={title}>
+        <title>{title}</title>
+        <path fill="rgba(196, 92, 74, 0.65)"
+              d="M13.5 0.7s1 3.2-1.6 6.4C9.6 10 6.9 11 6.9 11s.4-2.5-1.2-4.2C2.9 9.3 2 12 2 14.2 2 19.6 6.5 24 12 24s10-4.4 10-9.8c0-6.7-6-8.8-8.5-13.5z"/>
+      </svg>
+    );
+  }
+  if (kind === "moon") {
+    return (
+      <svg width="11" height="11" viewBox="0 0 24 24" aria-label={title}>
+        <title>{title}</title>
+        <path fill="rgba(150, 155, 170, 0.4)"
+              d="M12 3a9 9 0 1 0 9 9 7.2 7.2 0 0 1-9-9z"/>
+      </svg>
+    );
+  }
+  return null;
+}
 
 export default function Leaderboard(
   { rows, onSelect }: { rows: LeaderboardRow[]; onSelect: (key: number) => void },
@@ -32,6 +56,10 @@ export default function Leaderboard(
               padding: "0 8px", borderRadius: 8, cursor: "pointer",
             }}
           >
+            <div style={{ width: 14, display: "flex", alignItems: "center",
+                          justifyContent: "center" }}>
+              <Badge kind={r.badge} title={r.badgeTitle} />
+            </div>
             <div style={{ width: 26, opacity: 0.5,
                           fontVariantNumeric: "tabular-nums" }}>
               {i + 1}

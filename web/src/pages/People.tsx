@@ -34,11 +34,16 @@ const SORT_METRICS: SortMetric[] = [
 
 const DAY_MS = 86400000;
 
-function decorate(p: PersonSummary): string {
-  if (p.streak_days >= 3) return `${p.display_name} 🔥${p.streak_days}`;
+function badge(p: PersonSummary):
+  { badge?: "fire" | "moon"; badgeTitle?: string } {
+  if (p.streak_days >= 3) {
+    return { badge: "fire", badgeTitle: `${p.streak_days}-day streak` };
+  }
   const daysSince = (Date.now() - new Date(p.last_ts).getTime()) / DAY_MS;
-  if (daysSince > 30) return `${p.display_name} 😴`;
-  return p.display_name;
+  if (daysSince > 30) {
+    return { badge: "moon", badgeTitle: `quiet for ${Math.floor(daysSince)} days` };
+  }
+  return {};
 }
 
 export default function People() {
@@ -68,11 +73,12 @@ export default function People() {
           rows={rows.map((p) => {
             const v = value(p);
             return {
-              key: p.person_id, name: decorate(p),
+              key: p.person_id, name: p.display_name,
               total: v ?? 0,
               display: v == null ? "—" : metric.fmt(v),
               subtitle: `${p.total.toLocaleString()} msgs · `
                 + `${p.first_ts.slice(0, 10)} → ${p.last_ts.slice(0, 10)}`,
+              ...badge(p),
             };
           })}
           onSelect={(id) => navigate(`/person/${id}`)}

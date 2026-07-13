@@ -267,14 +267,24 @@ def person_trends(person_id: int, request: Request, bucket: str = "month"):
     db = request.app.state.db_path
     b = bucket_expr(bucket, col="ts_local")
 
+    # Reply-time medians are noisy per bucket, so smooth them with a trailing
+    # 4-bucket rolling average (which also bridges empty buckets).
     base = run(db, f"""
-        WITH msgs AS (SELECT m.* {_JOIN_1TO1})
-        SELECT {b} AS bucket,
-               count(*) FILTER (WHERE is_from_me) AS sent,
-               count(*) FILTER (WHERE NOT is_from_me) AS received,
-               median(response_seconds) FILTER (WHERE is_from_me) AS reply_me,
-               median(response_seconds) FILTER (WHERE NOT is_from_me) AS reply_them
-        FROM msgs GROUP BY 1""", [person_id])
+        WITH msgs AS (SELECT m.* {_JOIN_1TO1}),
+        by_bucket AS (
+            SELECT {b} AS bucket,
+                   count(*) FILTER (WHERE is_from_me) AS sent,
+                   count(*) FILTER (WHERE NOT is_from_me) AS received,
+                   median(response_seconds) FILTER (WHERE is_from_me) AS reply_me,
+                   median(response_seconds) FILTER (WHERE NOT is_from_me) AS reply_them
+            FROM msgs GROUP BY 1
+        )
+        SELECT bucket, sent, received,
+               avg(reply_me) OVER (ORDER BY bucket
+                                   ROWS BETWEEN 3 PRECEDING AND CURRENT ROW),
+               avg(reply_them) OVER (ORDER BY bucket
+                                     ROWS BETWEEN 3 PRECEDING AND CURRENT ROW)
+        FROM by_bucket""", [person_id])
 
     blocks = run(db, f"""
         WITH msgs AS (
@@ -379,7 +389,7 @@ def person_day_summary(person_id: int, date: str, request: Request):
         ORDER BY m.ts_local LIMIT 400""", [person_id, date])
     if not rows:
         raise HTTPException(status_code=404, detail="no messages on that day")
-    lines = [f"{hm} {'Me' if from_me else name[0][0]}: {text[:200]}"
+    lines = [f"{hm} {'You' if from_me else name[0][0]}: {text[:200]}"
              for hm, from_me, text in rows]
     transcript = "\n".join(lines)[:12000]
     result = summarize_day(f"{person_id}:{date}", name[0][0], date, transcript)

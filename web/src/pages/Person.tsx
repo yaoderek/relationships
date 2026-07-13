@@ -87,12 +87,12 @@ export default function Person() {
                  tickFormatter={(v: number) => metric.fmt(v)} />
           <Tooltip formatter={(v) => metric.fmt(Number(v))} />
           <Legend />
-          <Area dataKey="you" name="You" fill="#61DDAA" stroke="#61DDAA"
-                fillOpacity={0.25} strokeWidth={2} connectNulls
+          <Area type="monotone" dataKey="you" name="You" fill="#61DDAA"
+                stroke="#61DDAA" fillOpacity={0.25} strokeWidth={2} connectNulls
                 animationDuration={600} animationEasing="ease-out" />
           {metric.them && (
-            <Area dataKey="them" name={first} fill="#5B8FF9" stroke="#5B8FF9"
-                  fillOpacity={0.25} strokeWidth={2} connectNulls
+            <Area type="monotone" dataKey="them" name={first} fill="#5B8FF9"
+                  stroke="#5B8FF9" fillOpacity={0.25} strokeWidth={2} connectNulls
                   animationDuration={600} animationEasing="ease-out" />
           )}
         </AreaChart>

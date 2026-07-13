@@ -10,8 +10,10 @@ logger = logging.getLogger(__name__)
 
 _CACHE_PATH = Path("data/llm_cache.json")
 _SYSTEM_PROMPT = (
-    "You summarize one day of a text-message conversation between the user "
-    "('Me') and one other person. Reply with JSON: "
+    "You summarize one day of a text-message conversation between the reader "
+    "(their messages are labeled 'You') and one other person. Address the "
+    "reader in the second person — write 'You and Alex...', never 'Me' or "
+    "'the user'. Reply with JSON: "
     '{"summary": "2-4 sentences: what was happening that day, the main topics, '
     'and the mood", "sentiment": "one or two words, e.g. warm, playful, tense, '
     'flirty, logistical"}. Be specific but concise; never invent details.'
@@ -57,7 +59,7 @@ def summarize_day(cache_key: str, person_name: str, day: str,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user",
-             "content": f"Conversation between Me and {person_name} on {day}:\n\n"
+             "content": f"Conversation between You and {person_name} on {day}:\n\n"
                         f"{transcript}"},
         ],
         "response_format": {"type": "json_object"},
