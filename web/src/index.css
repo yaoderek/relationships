@@ -5,6 +5,7 @@ button { cursor: pointer; }
 h1 { font-size: 24px; }
 h2 { font-size: 17px; margin-top: 28px; }
 .dd-option:hover { background: rgba(128, 128, 128, 0.15); }
+.next-round:hover { background: rgba(128, 128, 128, 0.12); }
 .lb-row:hover { background: rgba(128, 128, 128, 0.08); }
 .spine-rail,
 .spine-balance {

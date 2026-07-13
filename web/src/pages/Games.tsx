@@ -44,6 +44,20 @@ function Bubble({ m }: { m: GameMessage }) {
 const NO_DATA = <p>Not enough message history for this game.</p>;
 const LOADING = <p>Loading round…</p>;
 
+function NextButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="next-round" style={{
+      display: "inline-flex", alignItems: "center", gap: 8, marginTop: 4,
+      padding: "6px 14px", fontSize: 13, font: "inherit", fontWeight: 500,
+      border: "1px solid rgba(128,128,128,0.35)", borderRadius: 8,
+      background: "transparent", color: "inherit",
+    }}>
+      Next round
+      <span aria-hidden style={{ fontSize: 12, opacity: 0.6 }}>→</span>
+    </button>
+  );
+}
+
 function choiceStyle(state: "idle" | "correct" | "wrong" | "dim") {
   return {
     display: "block", width: "100%", textAlign: "left" as const,
@@ -89,7 +103,7 @@ function WhoSaidIt({ onResult }: { onResult: (ok: boolean) => void }) {
       {picked !== null && (
         <div style={{ marginTop: 12 }}>
           <p>It was <b>{answer?.display_name}</b> — {round.date}.</p>
-          <button onClick={next}>Next round</button>
+          <NextButton onClick={next} />
         </div>
       )}
     </div>
@@ -128,7 +142,7 @@ function FinishConvo({ onResult }: { onResult: (ok: boolean) => void }) {
           <p>That was <b>{round.person_name}</b> — {round.date}.
              {round.aftermath.length > 0 && " And then:"}</p>
           {round.aftermath.map((m, i) => <Bubble key={i} m={m} />)}
-          <button onClick={next}>Next round</button>
+          <NextButton onClick={next} />
         </div>
       )}
     </div>
@@ -165,7 +179,7 @@ function WhoSaysItMore({ onResult }: { onResult: (ok: boolean) => void }) {
           </button>
         );
       })}
-      {picked !== null && <button onClick={next}>Next round</button>}
+      {picked !== null && <div style={{ marginTop: 12 }}><NextButton onClick={next} /></div>}
     </div>
   );
 }
