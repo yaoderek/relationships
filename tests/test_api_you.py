@@ -31,6 +31,14 @@ def test_you_catchphrases_timeline(client):
     assert client.get("/api/you/catchphrases-timeline").json() == []
 
 
+def test_you_calendar(client):
+    days = client.get("/api/you/calendar").json()
+    assert days == [
+        {"date": "2024-06-01", "count": 2},   # yo! + sup squad
+        {"date": "2024-06-02", "count": 1},   # morning
+    ]
+
+
 def test_you_hot_days(client):
     days = client.get("/api/you/hot-days").json()
     assert days[0]["date"] == "2024-06-01"

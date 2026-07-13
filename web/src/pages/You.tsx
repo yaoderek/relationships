@@ -2,6 +2,7 @@ import { useState } from "react";
 import { fetchCatchphrasesTimeline, fetchWordContext, fetchYou, fetchYouHotDays } from "../api";
 import type { SentenceCount } from "../api";
 import BlobField from "../components/BlobField";
+import CalendarHeatmap from "../components/CalendarHeatmap";
 import Heatmap from "../components/Heatmap";
 import Spine from "../components/Spine";
 import { Stat, statGridStyle } from "../components/StatGrid";
@@ -161,6 +162,7 @@ export default function You() {
 
       <h2 id="you-heatmap">When you text</h2>
       <Heatmap cells={stats.heatmap} />
+      <CalendarHeatmap />
 
       <h2 id="you-busiest">Busiest days ever</h2>
       {(hotDays ?? []).map((d) => (

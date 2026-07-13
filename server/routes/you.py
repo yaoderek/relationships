@@ -47,6 +47,15 @@ def you_vernacular_timeline(request: Request):
     return [{"bucket": y, "words": ws} for y, ws in sorted(out.items())]
 
 
+@router.get("/you/calendar")
+def you_calendar(request: Request):
+    rows = run(request.app.state.db_path, """
+        SELECT strftime(date_trunc('day', ts_local), '%Y-%m-%d') AS d, count(*)
+        FROM messages WHERE is_from_me
+        GROUP BY 1 ORDER BY 1""")
+    return [{"date": r[0], "count": r[1]} for r in rows]
+
+
 @router.get("/you/catchphrases-timeline")
 def you_catchphrases_timeline(request: Request):
     rows = run(request.app.state.db_path, """
