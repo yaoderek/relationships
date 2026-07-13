@@ -45,15 +45,9 @@ export default function You() {
       </p>
       <div style={statGridStyle}>
         <Stat label="Messages sent" value={stats.sent_total.toLocaleString()} />
-        <Stat label="DMs / groups"
-              value={`${stats.sent_in_dms.toLocaleString()} / ${stats.sent_in_groups.toLocaleString()}`} />
         <Stat label="Avg message length"
               value={`${Math.round(stats.avg_chars ?? 0)} chars`} />
-        <Stat label="Texts per reply"
-              value={stats.avg_texts_per_reply == null ? "—"
-                     : stats.avg_texts_per_reply.toFixed(1)} />
         <Stat label="Double texts" value={stats.double_texts.toLocaleString()} />
-        <Stat label="Emojis used" value={stats.emoji_total.toLocaleString()} />
         <Stat label="Favorite emoji" value={fav(stats.top_emojis)} />
         <Stat label="Go-to reaction" value={fav(stats.reactions_given)} />
         {stats.busiest_day && (
