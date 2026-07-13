@@ -20,7 +20,7 @@ export default function Compare() {
     <>
       <h1>Compare (pick up to 5)</h1>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-        {(persons ?? []).slice(0, 30).map((p) => (
+        {(persons ?? []).slice(0, 100).map((p) => (
           <button key={p.person_id} onClick={() => toggle(p.person_id)}
                   style={{ fontWeight: selected.includes(p.person_id) ? 700 : 400 }}>
             {p.display_name}

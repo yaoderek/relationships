@@ -33,6 +33,16 @@ export type GroupStats = {
   chat_id: number; name: string; my_share: number; session_count: number;
   busiest_day: { date: string; count: number } | null; members: GroupMember[];
 };
+export type WordCount = { word: string; count: number };
+export type GroupMemberStats = {
+  chat_id: number; person_id: number; display_name: string;
+  count: number; share: number; avg_chars: number | null;
+  sessions_total: number; sessions_participated: number;
+  sessions_ghosted: number; sessions_ended: number;
+  top_words: WordCount[]; top_emojis: EmojiCount[];
+  top_reactions_given: TapbackCount[]; tapbacks_received: number;
+};
+export type MemberSeriesPoint = { bucket: string; count: number };
 
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -58,3 +68,8 @@ export const fetchGroupSeries = (id: number, bucket: Bucket) =>
 export const fetchGroupHeatmap = (id: number) =>
   get<HeatCell[]>(`/api/groups/${id}/heatmap`);
 export const fetchGroupStats = (id: number) => get<GroupStats>(`/api/groups/${id}/stats`);
+export const fetchGroupMemberStats = (id: number, personId: number) =>
+  get<GroupMemberStats>(`/api/groups/${id}/members/${personId}/stats`);
+export const fetchGroupMemberSeries = (id: number, personId: number, bucket: Bucket) =>
+  get<MemberSeriesPoint[]>(
+    `/api/groups/${id}/members/${personId}/timeseries?bucket=${bucket}`);

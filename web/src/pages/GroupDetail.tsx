@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { fetchGroupHeatmap, fetchGroupSeries, fetchGroupStats } from "../api";
 import type { Bucket } from "../api";
 import BucketPicker from "../components/BucketPicker";
@@ -12,6 +12,7 @@ import { useFetch } from "../lib/useFetch";
 
 export default function GroupDetail() {
   const gid = Number(useParams().id);
+  const navigate = useNavigate();
   const [bucket, setBucket] = useState<Bucket>("week");
   const stats = useFetch(() => fetchGroupStats(gid), [gid]);
   const series = useFetch(() => fetchGroupSeries(gid, bucket), [gid, bucket]);
@@ -32,12 +33,12 @@ export default function GroupDetail() {
       {series && <GroupTimeSeries data={series} />}
       <h2>Share of voice</h2>
       <Leaderboard
-        rows={stats.members.map((m, i) => ({
-          key: m.person_id ?? -1 - i, name: m.display_name, total: m.count,
+        rows={stats.members.map((m) => ({
+          key: m.person_id ?? 0, name: m.display_name, total: m.count,
           subtitle: `${fmtPercent(m.share)} · ${m.tapbacks_received} tapbacks · `
             + `avg ${Math.round(m.avg_chars ?? 0)} chars`,
         }))}
-        onSelect={() => {}}
+        onSelect={(pid) => navigate(`/groups/${gid}/members/${pid}`)}
       />
       <h2>When it's active</h2>
       {heatmap && <Heatmap cells={heatmap} />}

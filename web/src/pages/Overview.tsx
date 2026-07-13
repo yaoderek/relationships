@@ -29,7 +29,7 @@ export default function Overview() {
       <h2>Top people (1:1 messages)</h2>
       {persons && (
         <Leaderboard
-          rows={persons.slice(0, 25).map((p) => ({
+          rows={persons.slice(0, 100).map((p) => ({
             key: p.person_id, name: p.display_name, total: p.total,
             subtitle: `${p.first_ts.slice(0, 10)} → ${p.last_ts.slice(0, 10)}`,
           }))}

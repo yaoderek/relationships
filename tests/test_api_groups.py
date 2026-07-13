@@ -46,3 +46,57 @@ def test_group_stats(client):
 def test_group_stats_404s(client):
     assert client.get("/api/groups/1/stats").status_code == 404      # 1:1 chat
     assert client.get("/api/groups/99999/stats").status_code == 404  # unknown
+
+
+def _alice_id(client):
+    return next(p["person_id"] for p in client.get("/api/persons").json()
+                if p["display_name"] == "Alice Smith")
+
+
+def _bob_id(client):
+    return next(p["person_id"] for p in client.get("/api/persons").json()
+                if p["display_name"] == "Bob Jones")
+
+
+def test_group_member_stats_alice(client):
+    gid = _squad_id(client)
+    s = client.get(f"/api/groups/{gid}/members/{_alice_id(client)}/stats").json()
+    assert s["display_name"] == "Alice Smith"
+    assert s["count"] == 1
+    assert s["share"] == pytest.approx(1 / 3)
+    assert s["sessions_total"] == 1
+    assert s["sessions_participated"] == 1
+    assert s["sessions_ghosted"] == 0
+    assert s["sessions_ended"] == 0            # my msg was last in the session
+    assert s["top_words"] == [{"word": "group", "count": 1}]  # "hi" too short
+    assert s["top_reactions_given"] == []      # her tapback was in the 1:1 chat
+    assert s["tapbacks_received"] == 0
+
+
+def test_group_member_stats_me(client):
+    gid = _squad_id(client)
+    s = client.get(f"/api/groups/{gid}/members/0/stats").json()
+    assert s["display_name"] == "Me"
+    assert s["count"] == 1
+    assert s["sessions_ended"] == 1            # "sup squad" ended the session
+    assert s["tapbacks_received"] == 1         # Bob laughed at g8
+    assert {"word": "sup", "count": 1} in s["top_words"]
+
+
+def test_group_member_reactions_given(client):
+    gid = _squad_id(client)
+    s = client.get(f"/api/groups/{gid}/members/{_bob_id(client)}/stats").json()
+    assert s["top_reactions_given"] == [{"kind": "laugh", "count": 1}]
+
+
+def test_group_member_timeseries(client):
+    gid = _squad_id(client)
+    series = client.get(
+        f"/api/groups/{gid}/members/{_alice_id(client)}/timeseries?bucket=day").json()
+    assert series == [{"bucket": "2024-06-01", "count": 1}]
+
+
+def test_group_member_404s(client):
+    gid = _squad_id(client)
+    assert client.get(f"/api/groups/{gid}/members/9999/stats").status_code == 404
+    assert client.get("/api/groups/1/members/0/stats").status_code == 404  # 1:1 chat

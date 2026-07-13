@@ -63,6 +63,111 @@ def group_heatmap(chat_id: int, request: Request):
             for r in run(db, sql, [chat_id])]
 
 
+_STOPWORDS = (
+    "the", "and", "you", "that", "this", "for", "but", "not", "with", "was",
+    "are", "have", "had", "just", "what", "your", "its", "it's", "can", "will",
+    "get", "got", "all", "out", "too", "then", "than", "they", "them", "there",
+    "when", "how", "who", "why", "yes", "yeah", "okay", "one", "him", "her",
+    "his", "she", "he's", "i'm", "i'll", "don't", "didn't", "were",
+)
+
+
+def _member_filter(person_id: int) -> tuple[str, list]:
+    # person_id 0 means the account owner ("Me"); my rows carry no person_id.
+    if person_id == 0:
+        return "m.is_from_me", []
+    return "m.person_id = ? AND NOT m.is_from_me", [person_id]
+
+
+def _require_member(db, chat_id: int, person_id: int) -> str:
+    if person_id == 0:
+        return "Me"
+    row = run(db, """
+        SELECT p.display_name FROM chat_members cm
+        JOIN persons p ON p.person_id = cm.person_id
+        WHERE cm.chat_id = ? AND cm.person_id = ?""", [chat_id, person_id])
+    if not row:
+        raise HTTPException(status_code=404, detail="not a member of this group")
+    return row[0][0]
+
+
+@router.get("/groups/{chat_id}/members/{person_id}/stats")
+def group_member_stats(chat_id: int, person_id: int, request: Request):
+    db = request.app.state.db_path
+    _require_group(db, chat_id)
+    display_name = _require_member(db, chat_id, person_id)
+    cond, params = _member_filter(person_id)
+
+    total = run(db, "SELECT count(*) FROM messages WHERE chat_id = ?", [chat_id])[0][0]
+    core = run(db, f"""
+        SELECT count(*), avg(m.char_len)
+        FROM messages m WHERE m.chat_id = ? AND {cond}""", [chat_id, *params])[0]
+    sessions = run(db, f"""
+        SELECT count(DISTINCT m.session_id),
+               count(DISTINCT m.session_id) FILTER (WHERE {cond})
+        FROM messages m WHERE m.chat_id = ?""", [*params, chat_id])[0]
+    ended = run(db, f"""
+        WITH lasts AS (
+            SELECT m.session_id,
+                   arg_max(CASE WHEN {cond} THEN 1 ELSE 0 END, m.ts_utc) AS by_member
+            FROM messages m WHERE m.chat_id = ?
+            GROUP BY 1)
+        SELECT coalesce(sum(by_member), 0) FROM lasts""", [*params, chat_id])[0][0]
+    placeholders = ", ".join("?" for _ in _STOPWORDS)
+    top_words = run(db, f"""
+        SELECT w AS word, count(*) AS c FROM (
+            SELECT unnest(string_split_regex(lower(m.text), '[^a-z'']+')) AS w
+            FROM messages m
+            WHERE m.chat_id = ? AND {cond} AND m.text IS NOT NULL)
+        WHERE len(w) >= 3 AND w NOT IN ({placeholders})
+        GROUP BY 1 ORDER BY c DESC, w LIMIT 10""",
+        [chat_id, *params, *_STOPWORDS])
+    top_emojis = run(db, f"""
+        SELECT e.emoji, count(*) AS c FROM emoji_uses e
+        JOIN messages m ON m.msg_id = e.msg_id
+        WHERE m.chat_id = ? AND {cond}
+        GROUP BY 1 ORDER BY c DESC LIMIT 5""", [chat_id, *params])
+    tap_cond = "t.is_from_me" if person_id == 0 else "t.person_id = ? AND NOT t.is_from_me"
+    tap_params = [] if person_id == 0 else [person_id]
+    reactions_given = run(db, f"""
+        SELECT t.kind, count(*) AS c FROM tapbacks t
+        JOIN messages tgt ON tgt.guid = t.target_guid
+        WHERE tgt.chat_id = ? AND {tap_cond}
+        GROUP BY 1 ORDER BY c DESC""", [chat_id, *tap_params])
+    tapbacks_received = run(db, f"""
+        SELECT count(*) FROM tapbacks t
+        JOIN messages m ON m.guid = t.target_guid
+        WHERE m.chat_id = ? AND {cond}""", [chat_id, *params])[0][0]
+
+    return {
+        "chat_id": chat_id, "person_id": person_id, "display_name": display_name,
+        "count": core[0], "share": core[0] / total if total else 0.0,
+        "avg_chars": core[1],
+        "sessions_total": sessions[0], "sessions_participated": sessions[1],
+        "sessions_ghosted": sessions[0] - sessions[1], "sessions_ended": ended,
+        "top_words": [{"word": r[0], "count": r[1]} for r in top_words],
+        "top_emojis": [{"emoji": r[0], "count": r[1]} for r in top_emojis],
+        "top_reactions_given": [{"kind": r[0], "count": r[1]} for r in reactions_given],
+        "tapbacks_received": tapbacks_received,
+    }
+
+
+@router.get("/groups/{chat_id}/members/{person_id}/timeseries")
+def group_member_timeseries(chat_id: int, person_id: int, request: Request,
+                            bucket: str = "week"):
+    db = request.app.state.db_path
+    _require_group(db, chat_id)
+    _require_member(db, chat_id, person_id)
+    cond, params = _member_filter(person_id)
+    sql = f"""
+        SELECT {bucket_expr(bucket)} AS bucket, count(*) AS count
+        FROM messages m WHERE m.chat_id = ? AND {cond}
+        GROUP BY 1 ORDER BY 1
+    """
+    return [{"bucket": r[0], "count": r[1]}
+            for r in run(db, sql, [chat_id, *params])]
+
+
 @router.get("/groups/{chat_id}/stats")
 def group_stats(chat_id: int, request: Request):
     db = request.app.state.db_path
