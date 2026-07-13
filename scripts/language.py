@@ -13,6 +13,7 @@ from pathlib import Path
 import duckdb
 import httpx
 import numpy as np
+import pyarrow as pa
 import umap
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -510,13 +511,22 @@ def main(people_only: bool = False) -> None:
                                  x DOUBLE, y DOUBLE, z DOUBLE,
                                  cluster_id INTEGER, msgs INTEGER);
     """)
-    insert = f"INSERT INTO text_embeddings VALUES (?,?,?,?, CAST(? AS FLOAT[{DIMS}]))"
-    chunk = 4000
-    for start in range(0, len(texts), chunk):
-        rows = [(t, total_by_text[t], mine_by_text[t],
-                 int(assign[text_idx[t]]), emb[text_idx[t]].tolist())
-                for t in texts[start:start + chunk]]
-        out.executemany(insert, rows)
+    # Bulk-load via a zero-copy Arrow table; row-by-row executemany with
+    # embeddings as Python lists takes minutes, this takes seconds.
+    emb_flat = pa.array(emb.reshape(-1), type=pa.float32())
+    arrow_tbl = pa.table({
+        "text": pa.array(texts, type=pa.string()),
+        "total": pa.array([total_by_text[t] for t in texts], type=pa.int32()),
+        "mine": pa.array([mine_by_text[t] for t in texts], type=pa.int32()),
+        "cluster_id": pa.array(assign.astype(np.int32)),
+        "embedding": pa.FixedSizeListArray.from_arrays(emb_flat, DIMS),
+    })
+    out.register("arrow_tbl", arrow_tbl)
+    out.execute(f"""
+        INSERT INTO text_embeddings
+        SELECT text, total, mine, cluster_id, CAST(embedding AS FLOAT[{DIMS}])
+        FROM arrow_tbl""")
+    out.unregister("arrow_tbl")
     out.executemany("INSERT INTO clusters VALUES (?,?,?,?)", cluster_rows)
     out.executemany("INSERT INTO cluster_people VALUES (?,?,?)",
                     cluster_people_rows)
