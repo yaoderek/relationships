@@ -1,9 +1,77 @@
+import re
+
 from fastapi import APIRouter, Request
 
 from ..db import run
 from ..stopwords import STOPWORDS
 
 router = APIRouter()
+
+
+@router.get("/you/word-context")
+def you_word_context(word: str, request: Request):
+    pattern = r"\b" + re.escape(word.lower()) + r"\b"
+    rows = run(request.app.state.db_path, """
+        SELECT trim(text) AS s, count(*) AS c
+        FROM messages
+        WHERE is_from_me AND text IS NOT NULL
+              AND regexp_matches(lower(text), ?)
+        GROUP BY 1 ORDER BY c DESC, s LIMIT 5""", [pattern])
+    return [{"text": r[0], "count": r[1]} for r in rows]
+
+
+@router.get("/you/vernacular-timeline")
+def you_vernacular_timeline(request: Request):
+    placeholders = ", ".join("?" for _ in STOPWORDS)
+    rows = run(request.app.state.db_path, f"""
+        WITH words AS (
+            SELECT strftime(date_trunc('year', ts_local), '%Y') AS y,
+                   unnest(string_split_regex(lower(text), '[^a-z'']+')) AS w
+            FROM messages WHERE is_from_me AND text IS NOT NULL
+        ),
+        counts AS (
+            SELECT y, w, count(*) AS c FROM words
+            WHERE len(w) >= 3 AND w NOT IN ({placeholders})
+            GROUP BY 1, 2
+        ),
+        ranked AS (
+            SELECT *, row_number() OVER (PARTITION BY y ORDER BY c DESC, w) AS rn
+            FROM counts
+        )
+        SELECT y, w, c FROM ranked WHERE rn <= 8 ORDER BY y, rn""",
+        [*STOPWORDS])
+    out: dict[str, list] = {}
+    for y, w, c in rows:
+        out.setdefault(y, []).append({"word": w, "count": c})
+    return [{"bucket": y, "words": ws} for y, ws in sorted(out.items())]
+
+
+@router.get("/you/hot-days")
+def you_hot_days(request: Request, limit: int = 10):
+    rows = run(request.app.state.db_path, """
+        WITH d AS (
+            SELECT strftime(date_trunc('day', ts_local), '%Y-%m-%d') AS day,
+                   is_from_me, person_id
+            FROM messages
+        ),
+        days AS (
+            SELECT day, count(*) AS c,
+                   count(*) FILTER (WHERE is_from_me) AS sent
+            FROM d GROUP BY 1 ORDER BY c DESC, day LIMIT ?
+        ),
+        tops AS (
+            SELECT d.day, p.display_name,
+                   row_number() OVER (PARTITION BY d.day
+                                      ORDER BY count(*) DESC, p.display_name) AS rn
+            FROM d JOIN persons p ON p.person_id = d.person_id
+            WHERE p.display_name NOT LIKE 'urn:%'
+            GROUP BY d.day, p.display_name
+        )
+        SELECT days.day, days.c, days.sent, t.display_name
+        FROM days LEFT JOIN tops t ON t.day = days.day AND t.rn = 1
+        ORDER BY days.c DESC, days.day""", [limit])
+    return [{"date": r[0], "count": r[1], "sent": r[2], "top_contact": r[3]}
+            for r in rows]
 
 
 @router.get("/you")

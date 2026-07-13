@@ -7,6 +7,7 @@ import BucketPicker from "../components/BucketPicker";
 import Dropdown from "../components/Dropdown";
 import Heatmap from "../components/Heatmap";
 import HotDays from "../components/HotDays";
+import Spine from "../components/Spine";
 import StatGrid from "../components/StatGrid";
 import { fmtDuration, fmtPercent } from "../lib/format";
 import { useFetch } from "../lib/useFetch";
@@ -61,9 +62,17 @@ export default function Person() {
 
   return (
     <>
-      <h1>{stats.display_name}</h1>
+      <Spine sections={[
+        { id: "p-stats", label: "Stats" },
+        { id: "p-trends", label: "Trends" },
+        { id: "p-heatmap", label: "When you talk" },
+        { id: "p-vernacular", label: "Vernacular" },
+        { id: "p-hotdays", label: "Hottest days" },
+      ]} />
+      <h1 id="p-stats">{stats.display_name}</h1>
       <StatGrid stats={stats} />
-      <div style={{ display: "flex", alignItems: "center", gap: 12,
+      <div id="p-trends"
+           style={{ display: "flex", alignItems: "center", gap: 12,
                     flexWrap: "wrap", marginBottom: 4 }}>
         <Dropdown
           value={metricKey}
@@ -97,12 +106,12 @@ export default function Person() {
           )}
         </AreaChart>
       </ResponsiveContainer>
-      <h2>When you talk</h2>
+      <h2 id="p-heatmap">When you talk</h2>
       {heatmap && <Heatmap cells={heatmap} />}
-      <h2>Vernacular</h2>
+      <h2 id="p-vernacular">Vernacular</h2>
       <WordChips label={first} words={stats.top_words_them} />
       <WordChips label="You" words={stats.top_words_me} />
-      <h2>Hottest days</h2>
+      <h2 id="p-hotdays">Hottest days</h2>
       <HotDays personId={pid} />
     </>
   );

@@ -101,6 +101,15 @@ export type TimelinePoint = {
 };
 export const fetchPersonsTimeline = () =>
   get<TimelinePoint[]>("/api/persons/timeline");
+export const fetchWordContext = (word: string) =>
+  get<SentenceCount[]>(`/api/you/word-context?word=${encodeURIComponent(word)}`);
+export type VernacularYear = { bucket: string; words: WordCount[] };
+export const fetchVernacularTimeline = () =>
+  get<VernacularYear[]>("/api/you/vernacular-timeline");
+export type YouHotDay = {
+  date: string; count: number; sent: number; top_contact: string | null;
+};
+export const fetchYouHotDays = () => get<YouHotDay[]>("/api/you/hot-days");
 export const fetchHotDays = (id: number) =>
   get<HotDay[]>(`/api/persons/${id}/hot-days`);
 export const fetchDaySummary = (id: number, date: string) =>

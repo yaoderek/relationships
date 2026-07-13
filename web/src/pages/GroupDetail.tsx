@@ -6,6 +6,7 @@ import BucketPicker from "../components/BucketPicker";
 import GroupTimeSeries from "../components/GroupTimeSeries";
 import Heatmap from "../components/Heatmap";
 import Leaderboard from "../components/Leaderboard";
+import Spine from "../components/Spine";
 import { Stat, statGridStyle } from "../components/StatGrid";
 import { fmtPercent } from "../lib/format";
 import { useFetch } from "../lib/useFetch";
@@ -20,7 +21,12 @@ export default function GroupDetail() {
   if (!stats) return <p>Loading…</p>;
   return (
     <>
-      <h1>{stats.name}</h1>
+      <Spine sections={[
+        { id: "g-stats", label: "Stats" },
+        { id: "g-voice", label: "Share of voice" },
+        { id: "g-heatmap", label: "When it's active" },
+      ]} />
+      <h1 id="g-stats">{stats.name}</h1>
       <div style={statGridStyle}>
         <Stat label="Your share" value={fmtPercent(stats.my_share)} />
         <Stat label="Sessions" value={stats.session_count.toLocaleString()} />
@@ -31,7 +37,7 @@ export default function GroupDetail() {
       </div>
       <BucketPicker value={bucket} onChange={setBucket} />
       {series && <GroupTimeSeries data={series} />}
-      <h2>Share of voice</h2>
+      <h2 id="g-voice">Share of voice</h2>
       <Leaderboard
         rows={stats.members.map((m) => ({
           key: m.person_id ?? 0, name: m.display_name, total: m.count,
@@ -40,7 +46,7 @@ export default function GroupDetail() {
         }))}
         onSelect={(pid) => navigate(`/groups/${gid}/members/${pid}`)}
       />
-      <h2>When it's active</h2>
+      <h2 id="g-heatmap">When it's active</h2>
       {heatmap && <Heatmap cells={heatmap} />}
     </>
   );

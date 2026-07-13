@@ -3,6 +3,7 @@ import { fetchCompare, fetchPersons } from "../api";
 import type { Bucket } from "../api";
 import ArcsChart from "../components/ArcsChart";
 import BucketPicker from "../components/BucketPicker";
+import Spine from "../components/Spine";
 import { useFetch } from "../lib/useFetch";
 
 export default function Compare() {
@@ -18,7 +19,8 @@ export default function Compare() {
                        : s.length < 5 ? [...s, id] : s);
   return (
     <>
-      <h1>Compare (pick up to 5)</h1>
+      <Spine sections={[{ id: "compare-top", label: "Compare" }]} />
+      <h1 id="compare-top">Compare (pick up to 5)</h1>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
         {(persons ?? []).slice(0, 100).map((p) => (
           <button key={p.person_id} onClick={() => toggle(p.person_id)}

@@ -6,6 +6,30 @@ h1 { font-size: 24px; }
 h2 { font-size: 17px; margin-top: 28px; }
 .dd-option:hover { background: rgba(128, 128, 128, 0.15); }
 .lb-row:hover { background: rgba(128, 128, 128, 0.08); }
+.spine {
+  position: fixed;
+  left: 20px;
+  top: 110px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 150px;
+}
+.spine a {
+  font-size: 12px;
+  text-decoration: none;
+  opacity: 0.45;
+  padding: 4px 10px;
+  border-left: 2px solid rgba(128, 128, 128, 0.25);
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+.spine a:hover { opacity: 0.85; }
+.spine a.spine-active {
+  opacity: 1;
+  border-left-color: #5B8FF9;
+}
+@media (max-width: 1360px) { .spine { display: none; } }
+[id] { scroll-margin-top: 16px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; }
 }
