@@ -70,6 +70,32 @@ def language_signature(request: Request, scope: str = "you"):
                         for r in rows]}
 
 
+@router.get("/language/people-clusters")
+def people_clusters(request: Request):
+    rows = run(_lang_db(request), """
+        SELECT cluster_id, label, person_id, name FROM person_clusters
+        ORDER BY cluster_id, name""")
+    out: dict[int, dict] = {}
+    for cid, label, pid, name in rows:
+        cluster = out.setdefault(cid, {"cluster_id": cid, "label": label,
+                                       "members": []})
+        cluster["members"].append({"person_id": pid, "name": name})
+    return list(out.values())
+
+
+@router.get("/language/people-map")
+def people_map(request: Request):
+    rows = run(_lang_db(request), """
+        SELECT person_id, name, period, x, y, z, cluster_id, msgs
+        FROM person_map ORDER BY period, name""")
+    return {
+        "periods": sorted({r[2] for r in rows}),
+        "points": [{"person_id": r[0], "name": r[1], "period": r[2],
+                    "x": r[3], "y": r[4], "z": r[5], "cluster_id": r[6],
+                    "msgs": r[7]} for r in rows],
+    }
+
+
 @router.get("/language/search")
 def language_search(q: str, request: Request, limit: int = 12):
     db = _lang_db(request)

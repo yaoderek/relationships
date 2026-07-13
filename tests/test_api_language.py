@@ -28,6 +28,11 @@ def lang_client(analytics_db: Path):
         CREATE TABLE voice_drift (month TEXT, drift DOUBLE, novelty DOUBLE);
         CREATE TABLE signature_phrases (scope TEXT, label TEXT, phrase TEXT,
                                         count INTEGER, score DOUBLE);
+        CREATE TABLE person_clusters (cluster_id INTEGER, label TEXT,
+                                      person_id INTEGER, name TEXT);
+        CREATE TABLE person_map (person_id INTEGER, name TEXT, period TEXT,
+                                 x DOUBLE, y DOUBLE, z DOUBLE,
+                                 cluster_id INTEGER, msgs INTEGER);
         INSERT INTO clusters VALUES (0, 'plans and logistics', 100, 0.5);
         INSERT INTO cluster_people VALUES (0, 'Alice Smith', 0.6);
         INSERT INTO voice_person VALUES (1, 'Alice Smith', 40, 0.12, 0.83);
@@ -35,6 +40,10 @@ def lang_client(analytics_db: Path):
         INSERT INTO signature_phrases VALUES
             ('you', 'You', 'womp womp', 12, 8.5),
             ('person:1', 'Alice Smith', 'rip to bro', 6, 5.2);
+        INSERT INTO person_clusters VALUES (0, 'the gym crew', 1, 'Alice Smith');
+        INSERT INTO person_map VALUES
+            (1, 'Alice Smith', 'all', 0.1, 0.2, 0.3, 0, 40),
+            (1, 'Alice Smith', '2024', 0.2, 0.1, 0.4, 0, 20);
     """)
     con.close()
     yield TestClient(create_app(analytics_db))
@@ -56,6 +65,19 @@ def test_language_voice_and_drift(lang_client):
     assert voice[0]["mirroring"] == 0.83
     drift = lang_client.get("/api/language/drift").json()
     assert drift == [{"month": "2024-06", "drift": None, "novelty": 0.1}]
+
+
+def test_people_clusters(lang_client):
+    out = lang_client.get("/api/language/people-clusters").json()
+    assert out == [{"cluster_id": 0, "label": "the gym crew",
+                    "members": [{"person_id": 1, "name": "Alice Smith"}]}]
+
+
+def test_people_map(lang_client):
+    out = lang_client.get("/api/language/people-map").json()
+    assert out["periods"] == ["2024", "all"]
+    assert out["points"][0]["name"] == "Alice Smith"
+    assert {p["period"] for p in out["points"]} == {"all", "2024"}
 
 
 def test_language_signature_scopes(lang_client):

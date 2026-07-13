@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, Cell, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
-import { fetchDrift, fetchLanguageSearch, fetchSignature, fetchSignatureScopes, fetchTopics, fetchVoice } from "../api";
+import { fetchDrift, fetchLanguageSearch, fetchPeopleClusters, fetchSignature, fetchSignatureScopes, fetchTopics, fetchVoice } from "../api";
 import type { SearchHit, VoicePoint } from "../api";
 import Dropdown from "../components/Dropdown";
 import Leaderboard from "../components/Leaderboard";
+import PeopleMap3D, { CLUSTER_PALETTE } from "../components/PeopleMap3D";
 import Spine from "../components/Spine";
 import { fmtPercent } from "../lib/format";
 import { useFetch } from "../lib/useFetch";
@@ -12,6 +13,7 @@ import { useFetch } from "../lib/useFetch";
 const SECTIONS = [
   { id: "lang-signature", label: "Signature phrases" },
   { id: "lang-topics", label: "Topics" },
+  { id: "lang-friends", label: "Friend clusters" },
   { id: "lang-voice", label: "Voice map" },
   { id: "lang-drift", label: "Style drift" },
   { id: "lang-search", label: "Semantic search" },
@@ -30,6 +32,7 @@ const VOICE_VIEWS = [
 export default function Language() {
   const navigate = useNavigate();
   const topics = useFetch(fetchTopics, []);
+  const peopleClusters = useFetch(fetchPeopleClusters, []);
   const voice = useFetch(fetchVoice, []);
   const drift = useFetch(fetchDrift, []);
   const scopes = useFetch(fetchSignatureScopes, []);
@@ -135,6 +138,40 @@ export default function Language() {
           </div>
         ))}
       </div>
+
+      <h2 id="lang-friends">Friend clusters</h2>
+      <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
+        Your top people clustered by what their messages sound like — k chosen
+        automatically for the cleanest split. Below, a UMAP projection of every
+        person into 3D space, per year.
+      </p>
+      <div style={{ display: "grid", gap: 10, marginBottom: 16,
+                    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+        {(peopleClusters ?? []).map((c) => (
+          <div key={c.cluster_id}
+               style={{ padding: "12px 14px", borderRadius: 10,
+                        border: "1px solid rgba(128,128,128,0.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8,
+                          marginBottom: 8 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 999,
+                             background: CLUSTER_PALETTE[
+                               c.cluster_id % CLUSTER_PALETTE.length] }} />
+              <span style={{ fontWeight: 650 }}>{c.label}</span>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {c.members.map((m) => (
+                <span key={m.person_id}
+                      style={{ fontSize: 12, padding: "2px 9px",
+                               borderRadius: 999,
+                               border: "1px solid rgba(128,128,128,0.3)" }}>
+                  {m.name.split(" ")[0]}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <PeopleMap3D />
 
       <h2 id="lang-voice">Voice</h2>
       <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>

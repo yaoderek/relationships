@@ -13,6 +13,7 @@ from pathlib import Path
 import duckdb
 import httpx
 import numpy as np
+import umap
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -77,6 +78,39 @@ def kmeans(x: np.ndarray, k: int, iters: int = 25, seed: int = 0):
                 c[j] = members.mean(0)
                 c[j] /= np.linalg.norm(c[j]) + 1e-9
     return assign, c
+
+
+def _silhouette(x: np.ndarray, assign: np.ndarray, k: int) -> float:
+    d = 1 - x @ x.T
+    scores = []
+    for i in range(len(x)):
+        same = assign == assign[i]
+        same[i] = False
+        if not same.any():
+            continue
+        a = d[i][same].mean()
+        others = [d[i][assign == j].mean()
+                  for j in range(k) if j != assign[i] and (assign == j).any()]
+        if not others:
+            continue
+        b = min(others)
+        scores.append((b - a) / max(a, b, 1e-12))
+    return float(np.mean(scores)) if scores else -1.0
+
+
+def pick_kmeans(x: np.ndarray, k_range=range(3, 9)):
+    """Run k-means for each k and keep the k with the best silhouette score."""
+    best = None
+    for k in k_range:
+        if k >= len(x):
+            break
+        assign, cent = kmeans(x, k, seed=42)
+        score = _silhouette(x, assign, k)
+        if best is None or score > best[3]:
+            best = (assign, cent, k, score)
+    if best is None:
+        raise ValueError("not enough points to cluster")
+    return best[0], best[1], best[2]
 
 
 def label_cluster(samples: list[str], api_key: str) -> str:
@@ -151,8 +185,38 @@ def main() -> None:
             mine_by_text[t] += 1
     texts = list(total_by_text)
     text_idx = {t: i for i, t in enumerate(texts)}
-    print(f"{len(texts):,} distinct texts — embedding with {EMBED_MODEL}")
-    emb = embed_texts(texts, api_key)
+
+    # Reuse embeddings from a previous run so re-runs only pay for new texts.
+    cached: dict[str, int] = {}
+    cached_emb = None
+    if OUT.exists():
+        prev = duckdb.connect(str(OUT), read_only=True)
+        try:
+            tbl = prev.execute(
+                "SELECT text, embedding FROM text_embeddings").fetch_arrow_table()
+            prev_texts = tbl["text"].to_pylist()
+            cached_emb = np.asarray(
+                tbl["embedding"].combine_chunks().flatten(),
+                dtype=np.float32).reshape(len(prev_texts), DIMS)
+            cached = {t: i for i, t in enumerate(prev_texts)}
+            print(f"reusing {len(cached):,} cached embeddings")
+        except duckdb.CatalogException:
+            pass
+        finally:
+            prev.close()
+
+    new_texts = [t for t in texts if t not in cached]
+    print(f"{len(texts):,} distinct texts — {len(new_texts):,} to embed "
+          f"with {EMBED_MODEL}")
+    new_emb = (embed_texts(new_texts, api_key) if new_texts
+               else np.empty((0, DIMS), dtype=np.float32))
+    new_idx = {t: i for i, t in enumerate(new_texts)}
+    emb = np.empty((len(texts), DIMS), dtype=np.float32)
+    for t, i in text_idx.items():
+        if t in cached:
+            emb[i] = cached_emb[cached[t]]
+        else:
+            emb[i] = new_emb[new_idx[t]]
 
     # ---- topic clusters ----
     print("clustering…")
@@ -223,6 +287,69 @@ def main() -> None:
         drift_rows.append((m, drift, novelty))
         prev = c
 
+    # ---- people clusters + temporal 3D map ----
+    print("people clusters…")
+    person_msg_texts: dict[int, Counter] = defaultdict(Counter)
+    person_year_texts: dict[tuple[int, str], Counter] = defaultdict(Counter)
+    for t, mine, pid, _m, year, _dm in msgs:
+        if not mine and pid in person_names:
+            person_msg_texts[pid][t] += 1
+            person_year_texts[(pid, year)][t] += 1
+
+    volumes = Counter({p: sum(c.values()) for p, c in person_msg_texts.items()})
+    vec_all: dict[int, np.ndarray] = {}
+    for pid, _n in volumes.most_common(40):
+        c = person_msg_texts[pid]
+        v = weighted_centroid(emb, [text_idx[t] for t in c], list(c.values()))
+        if v is not None:
+            vec_all[pid] = v
+    pids = list(vec_all)
+    people_x = np.stack([vec_all[p] for p in pids])
+    assign_p, cent_p, k_p = pick_kmeans(people_x, range(3, 9))
+    print(f"  {len(pids)} people → {k_p} clusters (best silhouette)")
+
+    person_cluster_rows = []
+    for cid in range(k_p):
+        members = [pids[i] for i in range(len(pids)) if assign_p[i] == cid]
+        samples = []
+        for pid in members[:8]:
+            tops = [t for t, _ in person_msg_texts[pid].most_common(80)
+                    if len(t) >= 6][:6]
+            samples += [f"{person_names[pid].split()[0]}: {t}" for t in tops]
+        label = label_cluster(samples[:40], api_key)
+        for pid in members:
+            person_cluster_rows.append((cid, label, pid, person_names[pid]))
+        print(f"  cluster {cid}: {label} — "
+              f"{[person_names[p].split()[0] for p in members]}")
+
+    period_keys: list[tuple[int, str]] = [(pid, "all") for pid in pids]
+    period_vecs: list[np.ndarray] = [vec_all[pid] for pid in pids]
+    period_msgs: dict[tuple[int, str], int] = {
+        (pid, "all"): volumes[pid] for pid in pids}
+    for (pid, year), c in sorted(person_year_texts.items()):
+        if pid not in vec_all or sum(c.values()) < 30:
+            continue
+        v = weighted_centroid(emb, [text_idx[t] for t in c], list(c.values()))
+        if v is None:
+            continue
+        period_keys.append((pid, year))
+        period_vecs.append(v)
+        period_msgs[(pid, year)] = sum(c.values())
+
+    print(f"  UMAP on {len(period_vecs)} person-period vectors…")
+    reducer = umap.UMAP(n_components=3, metric="cosine",
+                        n_neighbors=min(10, len(period_vecs) - 1),
+                        min_dist=0.3, random_state=42)
+    coords = reducer.fit_transform(np.stack(period_vecs))
+    coords = (coords - coords.mean(0)) / (coords.std(0) + 1e-9)
+
+    person_map_rows = []
+    for (pid, period), vec, (x, y, z) in zip(period_keys, period_vecs, coords):
+        cid = int((vec @ cent_p.T).argmax())
+        person_map_rows.append((pid, person_names[pid], period,
+                                float(x), float(y), float(z), cid,
+                                period_msgs[(pid, period)]))
+
     # ---- signature phrases (no embeddings needed) ----
     print("signature phrases…")
     global_all: Counter = Counter()
@@ -272,6 +399,11 @@ def main() -> None:
         CREATE TABLE voice_drift (month TEXT, drift DOUBLE, novelty DOUBLE);
         CREATE TABLE signature_phrases (scope TEXT, label TEXT, phrase TEXT,
                                         count INTEGER, score DOUBLE);
+        CREATE TABLE person_clusters (cluster_id INTEGER, label TEXT,
+                                      person_id INTEGER, name TEXT);
+        CREATE TABLE person_map (person_id INTEGER, name TEXT, period TEXT,
+                                 x DOUBLE, y DOUBLE, z DOUBLE,
+                                 cluster_id INTEGER, msgs INTEGER);
     """)
     insert = f"INSERT INTO text_embeddings VALUES (?,?,?,?, CAST(? AS FLOAT[{DIMS}]))"
     chunk = 4000
@@ -286,9 +418,14 @@ def main() -> None:
     out.executemany("INSERT INTO voice_person VALUES (?,?,?,?,?)", voice_rows)
     out.executemany("INSERT INTO voice_drift VALUES (?,?,?)", drift_rows)
     out.executemany("INSERT INTO signature_phrases VALUES (?,?,?,?,?)", sig_rows)
+    out.executemany("INSERT INTO person_clusters VALUES (?,?,?,?)",
+                    person_cluster_rows)
+    out.executemany("INSERT INTO person_map VALUES (?,?,?,?,?,?,?,?)",
+                    person_map_rows)
     out.close()
     print(f"done: {len(texts):,} embeddings, {K_CLUSTERS} topics, "
-          f"{len(voice_rows)} voice rows, {len(sig_rows)} signature phrases")
+          f"{len(voice_rows)} voice rows, {len(sig_rows)} signature phrases, "
+          f"{k_p} people clusters, {len(person_map_rows)} map points")
 
 
 if __name__ == "__main__":

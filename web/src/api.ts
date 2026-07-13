@@ -130,6 +130,18 @@ export type SignaturePhrase = { phrase: string; count: number; score: number };
 export const fetchSignature = (scope: string) =>
   get<{ scope: string; phrases: SignaturePhrase[] }>(
     `/api/language/signature?scope=${encodeURIComponent(scope)}`);
+export type PersonCluster = {
+  cluster_id: number; label: string;
+  members: { person_id: number; name: string }[];
+};
+export const fetchPeopleClusters = () =>
+  get<PersonCluster[]>("/api/language/people-clusters");
+export type MapPoint = {
+  person_id: number; name: string; period: string;
+  x: number; y: number; z: number; cluster_id: number; msgs: number;
+};
+export type PeopleMap = { periods: string[]; points: MapPoint[] };
+export const fetchPeopleMap = () => get<PeopleMap>("/api/language/people-map");
 export type SearchHit = {
   text: string; total: number; mine: number; similarity: number;
 };
