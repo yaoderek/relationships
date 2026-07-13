@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, Cell, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { fetchDrift, fetchLanguageSearch, fetchSignature, fetchSignatureScopes, fetchTopics, fetchVoice } from "../api";
-import type { SearchHit } from "../api";
+import type { SearchHit, VoicePoint } from "../api";
 import Dropdown from "../components/Dropdown";
+import Leaderboard from "../components/Leaderboard";
 import Spine from "../components/Spine";
 import { fmtPercent } from "../lib/format";
 import { useFetch } from "../lib/useFetch";
@@ -19,7 +21,14 @@ const PALETTE = ["#5B8FF9", "#61DDAA", "#F6BD16", "#7262FD", "#78D3F8",
                  "#9661BC", "#F6903D", "#008685", "#F08BB4", "#65789B",
                  "#6DC8EC", "#D3CBF6", "#DECFEA", "#FF9D4D"];
 
+const VOICE_VIEWS = [
+  { value: "map", label: "Voice map (2D)" },
+  { value: "divergence", label: "Code-switching by person" },
+  { value: "mirroring", label: "Mirroring by person" },
+];
+
 export default function Language() {
+  const navigate = useNavigate();
   const topics = useFetch(fetchTopics, []);
   const voice = useFetch(fetchVoice, []);
   const drift = useFetch(fetchDrift, []);
@@ -29,6 +38,13 @@ export default function Language() {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [voiceView, setVoiceView] = useState("map");
+  const [voiceQuery, setVoiceQuery] = useState("");
+
+  const voiceMatch = voiceQuery.trim()
+    ? (voice ?? []).find((v) =>
+        v.name.toLowerCase().includes(voiceQuery.trim().toLowerCase())) ?? null
+    : null;
 
   const search = () => {
     if (!query.trim() || searching) return;
@@ -120,49 +136,106 @@ export default function Language() {
         ))}
       </div>
 
-      <h2 id="lang-voice">Voice map</h2>
+      <h2 id="lang-voice">Voice</h2>
       <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
-        Right = you and they sound alike (mirroring). Up = you talk to them
-        differently than you talk to anyone else (code-switching).
+        Mirroring = how alike you two sound. Code-switching = how differently
+        you talk to them compared to everyone else.
       </p>
-      {voice && voice.length > 0 && (
-        <ResponsiveContainer width="100%" height={360}>
-          <ScatterChart margin={{ top: 16, right: 24, bottom: 8, left: 0 }}>
-            <CartesianGrid strokeOpacity={0.15} />
-            <XAxis type="number" dataKey="mirroring" name="mirroring"
-                   domain={["auto", "auto"]} tickLine={false}
-                   tickFormatter={(v: number) => v.toFixed(2)}
-                   label={{ value: "mirroring →", position: "insideBottomRight",
-                            fontSize: 11, opacity: 0.6 }} />
-            <YAxis type="number" dataKey="divergence" name="code-switching"
-                   domain={["auto", "auto"]} tickLine={false} axisLine={false}
-                   width={52} tickFormatter={(v: number) => v.toFixed(2)}
-                   label={{ value: "code-switching ↑", position: "insideTopLeft",
-                            fontSize: 11, opacity: 0.6 }} />
-            <ZAxis dataKey="msgs" range={[40, 400]} />
-            <Tooltip formatter={(v) => Number(v).toFixed(3)}
-                     labelFormatter={() => ""}
-                     content={({ payload }) => {
-                       const p = payload?.[0]?.payload;
-                       if (!p) return null;
-                       return (
-                         <div style={{ background: "Canvas", padding: "6px 10px",
-                                       border: "1px solid rgba(128,128,128,0.3)",
-                                       borderRadius: 8, fontSize: 12 }}>
-                           <strong>{p.name}</strong><br />
-                           mirroring {p.mirroring.toFixed(3)}<br />
-                           code-switching {p.divergence.toFixed(3)}
-                         </div>
-                       );
-                     }} />
-            <Scatter data={voice} fillOpacity={0.75}>
-              {voice.map((v, i) => (
-                <Cell key={v.person_id} fill={PALETTE[i % PALETTE.length]} />
-              ))}
-            </Scatter>
-          </ScatterChart>
-        </ResponsiveContainer>
+      <div style={{ display: "flex", alignItems: "center", gap: 8,
+                    flexWrap: "wrap", margin: "8px 0 12px" }}>
+        <Dropdown value={voiceView} options={VOICE_VIEWS}
+                  onChange={setVoiceView} />
+        <input value={voiceQuery}
+               onChange={(e) => setVoiceQuery(e.target.value)}
+               placeholder="find a person…"
+               style={{ padding: "6px 12px", fontSize: 13, font: "inherit",
+                        color: "inherit", background: "transparent",
+                        borderRadius: 8, width: 180,
+                        border: "1px solid rgba(128,128,128,0.35)" }} />
+        {voiceQuery.trim() && !voiceMatch && (
+          <span style={{ fontSize: 12, opacity: 0.6 }}>no match</span>
+        )}
+      </div>
+      {voiceMatch && (
+        <div style={{ display: "inline-flex", gap: 16, padding: "8px 14px",
+                      marginBottom: 10, borderRadius: 8, fontSize: 13,
+                      border: "1px solid rgba(91,143,249,0.5)",
+                      background: "rgba(91,143,249,0.10)" }}>
+          <strong>{voiceMatch.name}</strong>
+          <span>mirroring {voiceMatch.mirroring.toFixed(3)}</span>
+          <span>code-switching {voiceMatch.divergence.toFixed(3)}</span>
+          <span style={{ opacity: 0.6 }}>
+            {voiceMatch.msgs.toLocaleString()} msgs
+          </span>
+        </div>
       )}
+      {voice && voice.length > 0 && voiceView === "map" && (
+        <>
+          <div style={{ fontSize: 11, opacity: 0.55, marginBottom: 2 }}>
+            ↑ code-switching
+          </div>
+          <ResponsiveContainer width="100%" height={380}>
+            <ScatterChart margin={{ top: 16, right: 28, bottom: 8, left: 0 }}>
+              <CartesianGrid strokeOpacity={0.15} />
+              <XAxis type="number" dataKey="mirroring" name="mirroring"
+                     domain={["auto", "auto"]} tickLine={false} tickMargin={8}
+                     tickFormatter={(v: number) => v.toFixed(3)}
+                     style={{ fontSize: 11 }} />
+              <YAxis type="number" dataKey="divergence" name="code-switching"
+                     domain={["auto", "auto"]} tickLine={false} axisLine={false}
+                     width={58} tickMargin={6}
+                     tickFormatter={(v: number) => v.toFixed(3)}
+                     style={{ fontSize: 11 }} />
+              <ZAxis dataKey="msgs" range={[140, 1100]} />
+              <Tooltip content={({ payload }) => {
+                const p = payload?.[0]?.payload as VoicePoint | undefined;
+                if (!p) return null;
+                return (
+                  <div style={{ background: "Canvas", padding: "6px 10px",
+                                border: "1px solid rgba(128,128,128,0.3)",
+                                borderRadius: 8, fontSize: 12 }}>
+                    <strong>{p.name}</strong><br />
+                    mirroring {p.mirroring.toFixed(3)}<br />
+                    code-switching {p.divergence.toFixed(3)}
+                  </div>
+                );
+              }} />
+              <Scatter data={voice}>
+                {voice.map((v, i) => {
+                  const highlighted = voiceMatch?.person_id === v.person_id;
+                  return (
+                    <Cell key={v.person_id}
+                          fill={PALETTE[i % PALETTE.length]}
+                          fillOpacity={voiceMatch ? (highlighted ? 1 : 0.2)
+                                                  : 0.8}
+                          stroke={highlighted ? "#fff" : "none"}
+                          strokeWidth={highlighted ? 2.5 : 0} />
+                  );
+                })}
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
+          <div style={{ fontSize: 11, opacity: 0.55, textAlign: "right" }}>
+            mirroring →
+          </div>
+        </>
+      )}
+      {voice && voice.length > 0 && voiceView !== "map" && (() => {
+        const metric = voiceView as "divergence" | "mirroring";
+        const values = voice.map((v) => v[metric]);
+        const min = Math.min(...values);
+        const range = Math.max(1e-9, Math.max(...values) - min);
+        const rows = [...voice]
+          .sort((a, b) => b[metric] - a[metric])
+          .map((v) => ({
+            key: v.person_id, name: v.name,
+            total: (v[metric] - min) / range * 100 + 5,
+            display: v[metric].toFixed(3),
+            subtitle: `${v.msgs.toLocaleString()} msgs`,
+          }));
+        return <Leaderboard rows={rows} highlightKey={voiceMatch?.person_id}
+                            onSelect={(id) => navigate(`/person/${id}`)} />;
+      })()}
 
       <h2 id="lang-drift">How your voice drifts</h2>
       <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>

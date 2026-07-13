@@ -31,7 +31,9 @@ function Badge({ kind, title }: { kind?: "fire" | "moon"; title?: string }) {
 }
 
 export default function Leaderboard(
-  { rows, onSelect }: { rows: LeaderboardRow[]; onSelect: (key: number) => void },
+  { rows, onSelect, highlightKey }:
+  { rows: LeaderboardRow[]; onSelect: (key: number) => void;
+    highlightKey?: number },
 ) {
   const max = Math.max(1, ...rows.map((r) => r.total));
   const position = new Map(rows.map((r, i) => [r.key, i]));
@@ -54,6 +56,8 @@ export default function Leaderboard(
               transition: `transform .5s ${EASE}`,
               display: "flex", alignItems: "center", gap: 10,
               padding: "0 8px", borderRadius: 8, cursor: "pointer",
+              background: highlightKey === r.key
+                ? "rgba(91,143,249,0.15)" : undefined,
             }}
           >
             <div style={{ width: 14, display: "flex", alignItems: "center",
