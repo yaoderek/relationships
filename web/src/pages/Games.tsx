@@ -5,6 +5,7 @@ import {
 import type {
   FinishConvoRound, GameMessage, WhoSaidItRound, WhoSaysItMoreRound,
 } from "../api";
+import Dropdown from "../components/Dropdown";
 
 type GameId = "who-said-it" | "finish-the-convo" | "who-says-it-more";
 
@@ -186,12 +187,11 @@ export default function Games() {
       <h1>Games</h1>
       <div style={{ display: "flex", alignItems: "center", gap: 16,
                     marginBottom: 24 }}>
-        <select value={game}
-                onChange={(e) => switchGame(e.target.value as GameId)}>
-          {GAMES.map((g) => (
-            <option key={g.id} value={g.id}>{g.label}</option>
-          ))}
-        </select>
+        <Dropdown
+          value={game}
+          options={GAMES.map((g) => ({ value: g.id, label: g.label }))}
+          onChange={(v) => switchGame(v as GameId)}
+        />
         <span>
           Score: {score.correct}/{score.played} · Streak: {score.streak}
         </span>
