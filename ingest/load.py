@@ -56,6 +56,12 @@ def resolve_persons(handles, contacts, overrides):
     return persons, handle_person
 
 
+def _insert_rows(con, sql: str, rows: list) -> None:
+    # duckdb's executemany raises on an empty parameter list
+    if rows:
+        con.executemany(sql, rows)
+
+
 def _naive_utc(dt):
     return dt.replace(tzinfo=None) if dt else None
 
@@ -108,18 +114,19 @@ def build_analytics_db(out_path: Path, raw: RawData, contacts, overrides=None) -
     out_path.unlink(missing_ok=True)
     con = duckdb.connect(str(out_path))
     con.execute(_DDL)
-    con.executemany("INSERT INTO persons VALUES (?,?,?)",
-                    [(p["person_id"], p["display_name"], p["source"]) for p in persons])
-    con.executemany("INSERT INTO handles VALUES (?,?,?,?)",
-                    [(h["handle_id"], handle_person[h["handle_id"]], h["id"], h["service"])
-                     for h in raw.handles])
-    con.executemany("INSERT INTO chats VALUES (?,?,?,?)",
-                    [(c["chat_id"], c["display_name"], is_group[c["chat_id"]],
-                      len(members.get(c["chat_id"], ())))
-                     for c in raw.chats])
-    con.executemany("INSERT INTO chat_members VALUES (?,?)",
-                    [(cid, pid) for cid, pids in members.items() for pid in pids])
-    con.executemany(
+    _insert_rows(con, "INSERT INTO persons VALUES (?,?,?)",
+                 [(p["person_id"], p["display_name"], p["source"]) for p in persons])
+    _insert_rows(con, "INSERT INTO handles VALUES (?,?,?,?)",
+                 [(h["handle_id"], handle_person[h["handle_id"]], h["id"], h["service"])
+                  for h in raw.handles])
+    _insert_rows(con, "INSERT INTO chats VALUES (?,?,?,?)",
+                 [(c["chat_id"], c["display_name"], is_group[c["chat_id"]],
+                   len(members.get(c["chat_id"], ())))
+                  for c in raw.chats])
+    _insert_rows(con, "INSERT INTO chat_members VALUES (?,?)",
+                 [(cid, pid) for cid, pids in members.items() for pid in pids])
+    _insert_rows(
+        con,
         """INSERT INTO messages VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         [(r["msg_id"], r["guid"], r["chat_id"], r["person_id"], r["is_from_me"],
           _naive_utc(r["ts_utc"]), _naive_local(r["ts_utc"]),
@@ -127,14 +134,12 @@ def build_analytics_db(out_path: Path, raw: RawData, contacts, overrides=None) -
           r["service"], r["text"], r["char_len"], r["word_count"], r["emoji_count"],
           r["has_attachment"], r["is_audio"], r["thread_originator_guid"],
           r["session_id"], r["response_seconds"]) for r in rows])
-    con.executemany("INSERT INTO tapbacks VALUES (?,?,?,?,?)",
-                    [(t["target_guid"], handle_person.get(t["handle_id"]),
-                      bool(t["is_from_me"]), t["kind"],
-                      _naive_utc(apple_to_utc(t["date"]))) for t in raw_tapbacks])
-    if raw.attachments:
-        con.executemany("INSERT INTO attachments VALUES (?,?,?)",
-                        [(a["msg_id"], a["mime_type"], a["total_bytes"])
-                         for a in raw.attachments])
-    if emoji_rows:
-        con.executemany("INSERT INTO emoji_uses VALUES (?,?)", emoji_rows)
+    _insert_rows(con, "INSERT INTO tapbacks VALUES (?,?,?,?,?)",
+                 [(t["target_guid"], handle_person.get(t["handle_id"]),
+                   bool(t["is_from_me"]), t["kind"],
+                   _naive_utc(apple_to_utc(t["date"]))) for t in raw_tapbacks])
+    _insert_rows(con, "INSERT INTO attachments VALUES (?,?,?)",
+                 [(a["msg_id"], a["mime_type"], a["total_bytes"])
+                  for a in raw.attachments])
+    _insert_rows(con, "INSERT INTO emoji_uses VALUES (?,?)", emoji_rows)
     con.close()
