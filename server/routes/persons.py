@@ -5,17 +5,82 @@ from ..db import bucket_expr, run
 router = APIRouter()
 
 _LIST_SQL = """
+    WITH msgs AS (
+        SELECT cm.person_id, m.chat_id, m.session_id, m.ts_utc, m.ts_local,
+               m.is_from_me, m.response_seconds
+        FROM messages m
+        JOIN chats c ON c.chat_id = m.chat_id AND NOT c.is_group
+        JOIN chat_members cm ON cm.chat_id = m.chat_id
+    ),
+    base AS (
+        SELECT person_id,
+               count(*) AS total,
+               count(*) FILTER (WHERE is_from_me) AS sent,
+               count(*) FILTER (WHERE NOT is_from_me) AS received,
+               min(ts_local) AS first_ts, max(ts_local) AS last_ts,
+               median(response_seconds) FILTER (WHERE is_from_me) AS median_me,
+               median(response_seconds) FILTER (WHERE NOT is_from_me) AS median_them
+        FROM msgs GROUP BY 1
+    ),
+    sess AS (
+        SELECT person_id, session_id, count(*) AS n,
+               date_diff('second', min(ts_utc), max(ts_utc)) AS dur,
+               arg_min(is_from_me, ts_utc) AS first_from_me,
+               arg_max(is_from_me, ts_utc) AS last_from_me
+        FROM msgs GROUP BY 1, 2
+    ),
+    sess_agg AS (
+        SELECT person_id,
+               avg(CASE WHEN first_from_me THEN 1.0 ELSE 0.0 END) AS initiation,
+               avg(n) AS avg_session_messages,
+               avg(dur) AS avg_session_seconds,
+               count(*) FILTER (WHERE last_from_me) AS ghosts_by_them,
+               count(*) FILTER (WHERE NOT last_from_me) AS ghosts_by_me
+        FROM sess GROUP BY 1
+    ),
+    flagged AS (
+        SELECT person_id, chat_id, ts_utc, is_from_me,
+               CASE WHEN lag(is_from_me) OVER w = is_from_me
+                         AND lag(session_id) OVER w = session_id
+                    THEN 0 ELSE 1 END AS new_block,
+               CASE WHEN lag(is_from_me) OVER w = is_from_me
+                         AND date_diff('second', lag(ts_utc) OVER w, ts_utc) >= 600
+                    THEN 1 ELSE 0 END AS double_text
+        FROM msgs
+        WINDOW w AS (PARTITION BY chat_id ORDER BY ts_utc)
+    ),
+    block_sizes AS (
+        SELECT person_id, any_value(is_from_me) AS is_from_me, count(*) AS n
+        FROM (SELECT *, sum(new_block) OVER (PARTITION BY chat_id ORDER BY ts_utc)
+                     AS block_id
+              FROM flagged)
+        GROUP BY person_id, chat_id, block_id
+    ),
+    block_agg AS (
+        SELECT person_id,
+               avg(n) FILTER (WHERE is_from_me) AS block_me,
+               avg(n) FILTER (WHERE NOT is_from_me) AS block_them
+        FROM block_sizes GROUP BY 1
+    ),
+    dt_agg AS (
+        SELECT person_id,
+               count(*) FILTER (WHERE double_text = 1 AND is_from_me) AS dt_me,
+               count(*) FILTER (WHERE double_text = 1 AND NOT is_from_me) AS dt_them
+        FROM flagged GROUP BY 1
+    )
     SELECT p.person_id, p.display_name,
-           count(m.msg_id) AS total,
-           count(m.msg_id) FILTER (WHERE m.is_from_me) AS sent,
-           count(m.msg_id) FILTER (WHERE NOT m.is_from_me) AS received,
-           min(m.ts_local) AS first_ts, max(m.ts_local) AS last_ts
+           b.total, b.sent, b.received, b.first_ts, b.last_ts,
+           b.median_me, b.median_them,
+           s.initiation, s.avg_session_messages, s.avg_session_seconds,
+           s.ghosts_by_them, s.ghosts_by_me,
+           bl.block_me, bl.block_them,
+           d.dt_me, d.dt_them
     FROM persons p
-    JOIN chat_members cm ON cm.person_id = p.person_id
-    JOIN chats c ON c.chat_id = cm.chat_id AND NOT c.is_group
-    JOIN messages m ON m.chat_id = c.chat_id
-    GROUP BY 1, 2
-    ORDER BY total DESC
+    JOIN base b ON b.person_id = p.person_id
+    JOIN sess_agg s ON s.person_id = p.person_id
+    JOIN block_agg bl ON bl.person_id = p.person_id
+    JOIN dt_agg d ON d.person_id = p.person_id
+    ORDER BY b.total DESC
 """
 
 
@@ -23,7 +88,13 @@ _LIST_SQL = """
 def list_persons(request: Request):
     return [
         {"person_id": r[0], "display_name": r[1], "total": r[2], "sent": r[3],
-         "received": r[4], "first_ts": r[5], "last_ts": r[6]}
+         "received": r[4], "first_ts": r[5], "last_ts": r[6],
+         "median_response_seconds_me": r[7], "median_response_seconds_them": r[8],
+         "initiation_rate_me": r[9], "avg_session_messages": r[10],
+         "avg_session_seconds": r[11], "ghosts_by_them": r[12],
+         "ghosts_by_me": r[13], "avg_reply_block_me": r[14],
+         "avg_reply_block_them": r[15], "double_texts_me": r[16],
+         "double_texts_them": r[17]}
         for r in run(request.app.state.db_path, _LIST_SQL)
     ]
 

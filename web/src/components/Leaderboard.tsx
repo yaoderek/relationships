@@ -1,4 +1,7 @@
-export type LeaderboardRow = { key: number; name: string; total: number; subtitle: string };
+export type LeaderboardRow = {
+  key: number; name: string; total: number; subtitle: string;
+  display?: string;
+};
 
 export default function Leaderboard(
   { rows, onSelect }: { rows: LeaderboardRow[]; onSelect: (key: number) => void },
@@ -20,7 +23,7 @@ export default function Leaderboard(
             </td>
             <td style={{ padding: "6px 8px", textAlign: "right",
                          fontVariantNumeric: "tabular-nums" }}>
-              {r.total.toLocaleString()}
+              {r.display ?? r.total.toLocaleString()}
             </td>
           </tr>
         ))}

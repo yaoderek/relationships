@@ -8,6 +8,24 @@ def test_persons_leaderboard(client):
     assert alice["last_ts"].startswith("2024-06-02")
 
 
+def test_persons_leaderboard_metrics(client):
+    people = client.get("/api/persons").json()
+    alice = next(p for p in people if p["display_name"] == "Alice Smith")
+    assert alice["median_response_seconds_me"] == 120.0
+    assert alice["median_response_seconds_them"] == 300.0
+    assert alice["initiation_rate_me"] == 0.5
+    assert alice["double_texts_me"] == 1
+    assert alice["double_texts_them"] == 0
+    assert alice["ghosts_by_them"] == 1
+    assert alice["ghosts_by_me"] == 1
+    assert alice["avg_session_seconds"] == 210.0
+    assert alice["avg_session_messages"] == 2.0
+    assert alice["avg_reply_block_them"] == 1.0
+    bob = next(p for p in people if p["display_name"] == "Bob Jones")
+    assert bob["median_response_seconds_me"] is None   # never replied to Bob
+    assert bob["initiation_rate_me"] == 0.0
+
+
 def _alice_id(client):
     return next(p["person_id"] for p in client.get("/api/persons").json()
                 if p["display_name"] == "Alice Smith")

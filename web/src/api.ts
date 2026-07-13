@@ -2,6 +2,13 @@ export type Bucket = "day" | "week" | "month";
 export type PersonSummary = {
   person_id: number; display_name: string; total: number;
   sent: number; received: number; first_ts: string; last_ts: string;
+  median_response_seconds_me: number | null;
+  median_response_seconds_them: number | null;
+  initiation_rate_me: number | null;
+  avg_session_messages: number | null; avg_session_seconds: number | null;
+  ghosts_by_them: number; ghosts_by_me: number;
+  avg_reply_block_me: number | null; avg_reply_block_them: number | null;
+  double_texts_me: number; double_texts_them: number;
 };
 export type SeriesPoint = { bucket: string; sent: number; received: number };
 export type HeatCell = { weekday: number; hour: number; count: number };
