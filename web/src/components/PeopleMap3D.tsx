@@ -81,6 +81,49 @@ export default function PeopleMap3D() {
       const cp = Math.cos(rot.pitch), sp = Math.sin(rot.pitch);
 
       ctx.clearRect(0, 0, W, H);
+
+      const project = (x: number, y: number, z: number) => {
+        const x1 = x * cy + z * sy;
+        const z1 = -x * sy + z * cy;
+        const y2 = y * cp - z1 * sp;
+        const z2 = y * sp + z1 * cp;
+        const scale = FOV / (FOV + z2);
+        return { sx: W / 2 + x1 * scale * 160,
+                 sy: H / 2 + y2 * scale * 160, scale };
+      };
+
+      // World-anchored axes so rotation stays legible.
+      const AXES: { dir: [number, number, number]; label: string;
+                    color: string }[] = [
+        { dir: [1, 0, 0], label: "x", color: "rgba(240, 139, 180, 0.5)" },
+        { dir: [0, 1, 0], label: "y", color: "rgba(97, 221, 170, 0.5)" },
+        { dir: [0, 0, 1], label: "z", color: "rgba(91, 143, 249, 0.5)" },
+      ];
+      const L = 2.6;
+      for (const ax of AXES) {
+        const pos = project(ax.dir[0] * L, ax.dir[1] * L, ax.dir[2] * L);
+        const neg = project(-ax.dir[0] * L, -ax.dir[1] * L, -ax.dir[2] * L);
+        // negative half dimmer to convey direction
+        ctx.strokeStyle = ax.color;
+        ctx.lineWidth = 1;
+        const origin = project(0, 0, 0);
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(origin.sx, origin.sy);
+        ctx.lineTo(pos.sx, pos.sy);
+        ctx.stroke();
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath();
+        ctx.moveTo(origin.sx, origin.sy);
+        ctx.lineTo(neg.sx, neg.sy);
+        ctx.stroke();
+        ctx.globalAlpha = 0.7;
+        ctx.font = "11px system-ui";
+        ctx.fillStyle = ax.color.replace("0.5", "0.9");
+        ctx.fillText(ax.label, pos.sx + 4, pos.sy + 4);
+      }
+      ctx.globalAlpha = 1;
+
       const drawable: { n: Node; sx: number; sy: number; scale: number }[] = [];
       for (const n of nodesRef.current.values()) {
         n.x += (n.tx - n.x) * LERP;
