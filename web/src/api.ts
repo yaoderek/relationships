@@ -13,6 +13,11 @@ export type PersonStats = {
   median_response_seconds_them: number | null; p90_response_seconds_them: number | null;
   avg_chars_me: number | null; avg_chars_them: number | null;
   initiation_rate_me: number | null;
+  avg_reply_block_me: number | null; avg_reply_block_them: number | null;
+  reply_block_ratio: number | null;
+  double_texts_me: number; double_texts_them: number;
+  ghosts_by_them: number; ghosts_by_me: number;
+  avg_session_messages: number | null; avg_session_seconds: number | null;
   top_emojis_me: EmojiCount[]; top_emojis_them: EmojiCount[];
   tapbacks_from_them: TapbackCount[]; tapbacks_from_me: TapbackCount[];
 };

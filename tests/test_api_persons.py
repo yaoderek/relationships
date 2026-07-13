@@ -42,6 +42,21 @@ def test_person_stats(client):
     assert s["tapbacks_from_me"] == []
 
 
+def test_person_conversation_stats(client):
+    pid = _alice_id(client)
+    s = client.get(f"/api/persons/{pid}/stats").json()
+    # every reply in the fixture is a single message
+    assert s["avg_reply_block_me"] == 1.0
+    assert s["avg_reply_block_them"] == 1.0
+    assert s["reply_block_ratio"] == 1.0
+    assert s["double_texts_me"] == 1       # "morning" sent after unanswered "yo!"
+    assert s["double_texts_them"] == 0
+    assert s["ghosts_by_them"] == 1        # Jun 1 session ended on my message
+    assert s["ghosts_by_me"] == 1          # Jun 2 session ended on hers
+    assert s["avg_session_seconds"] == 210.0   # (120 + 300) / 2
+    assert s["avg_session_messages"] == 2.0
+
+
 def test_person_stats_404(client):
     assert client.get("/api/persons/9999/stats").status_code == 404
 

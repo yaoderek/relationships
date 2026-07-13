@@ -79,6 +79,50 @@ def person_stats(person_id: int, request: Request):
         SELECT avg(CASE WHEN starter_is_me THEN 1.0 ELSE 0.0 END) FROM firsts
     """, [person_id])[0][0]
 
+    # Reply blocks = maximal runs of consecutive messages from the same sender
+    # within a session. Double text = same sender again after >= 10 unanswered min.
+    blocks = run(db, f"""
+        WITH msgs AS (
+            SELECT m.chat_id, m.session_id, m.ts_utc, m.is_from_me
+            {_JOIN_1TO1}
+        ),
+        flagged AS (
+            SELECT *,
+                   CASE WHEN lag(is_from_me) OVER w = is_from_me
+                             AND lag(session_id) OVER w = session_id
+                        THEN 0 ELSE 1 END AS new_block,
+                   CASE WHEN lag(chat_id) OVER w = chat_id
+                             AND lag(is_from_me) OVER w = is_from_me
+                             AND date_diff('second', lag(ts_utc) OVER w, ts_utc) >= 600
+                        THEN 1 ELSE 0 END AS double_text
+            FROM msgs
+            WINDOW w AS (ORDER BY chat_id, ts_utc)
+        ),
+        block_sizes AS (
+            SELECT any_value(is_from_me) AS is_from_me, count(*) AS n
+            FROM (SELECT *, sum(new_block) OVER (ORDER BY chat_id, ts_utc) AS block_id
+                  FROM flagged)
+            GROUP BY block_id
+        )
+        SELECT (SELECT avg(n) FROM block_sizes WHERE is_from_me),
+               (SELECT avg(n) FROM block_sizes WHERE NOT is_from_me),
+               (SELECT count(*) FROM flagged WHERE double_text = 1 AND is_from_me),
+               (SELECT count(*) FROM flagged WHERE double_text = 1 AND NOT is_from_me)
+    """, [person_id])[0]
+    sessions = run(db, f"""
+        WITH sess AS (
+            SELECT m.session_id, count(*) AS n,
+                   date_diff('second', min(m.ts_utc), max(m.ts_utc)) AS dur,
+                   arg_max(m.is_from_me, m.ts_utc) AS last_from_me
+            {_JOIN_1TO1}
+            GROUP BY 1)
+        SELECT avg(n), avg(dur),
+               count(*) FILTER (WHERE last_from_me),
+               count(*) FILTER (WHERE NOT last_from_me)
+        FROM sess""", [person_id])[0]
+    block_me, block_them, doubles_me, doubles_them = blocks
+    block_ratio = (block_them / block_me) if block_me and block_them else None
+
     def emojis(from_me: bool):
         return [{"emoji": r[0], "count": r[1]} for r in run(db, """
             SELECT e.emoji, count(*) AS c FROM emoji_uses e
@@ -104,6 +148,11 @@ def person_stats(person_id: int, request: Request):
         "median_response_seconds_them": core[5], "p90_response_seconds_them": core[6],
         "avg_chars_me": core[7], "avg_chars_them": core[8],
         "initiation_rate_me": initiation,
+        "avg_reply_block_me": block_me, "avg_reply_block_them": block_them,
+        "reply_block_ratio": block_ratio,
+        "double_texts_me": doubles_me, "double_texts_them": doubles_them,
+        "ghosts_by_them": sessions[2], "ghosts_by_me": sessions[3],
+        "avg_session_messages": sessions[0], "avg_session_seconds": sessions[1],
         "top_emojis_me": emojis(True), "top_emojis_them": emojis(False),
         "tapbacks_from_them": tap_from_them, "tapbacks_from_me": tap_from_me,
     }
