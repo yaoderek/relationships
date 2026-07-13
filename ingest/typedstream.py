@@ -13,12 +13,21 @@ def decode_attributed_body(blob: bytes | None) -> str | None:
         return None
     marker = blob[pos]
     if marker == 0x81:
-        length = int.from_bytes(blob[pos + 1 : pos + 3], "little")
+        raw = blob[pos + 1 : pos + 3]
+        if len(raw) < 2:
+            return None
+        length = int.from_bytes(raw, "little")
         pos += 3
     elif marker == 0x82:
-        length = int.from_bytes(blob[pos + 1 : pos + 5], "little")
+        raw = blob[pos + 1 : pos + 5]
+        if len(raw) < 4:
+            return None
+        length = int.from_bytes(raw, "little")
         pos += 5
     else:
         length = marker
         pos += 1
-    return blob[pos : pos + length].decode("utf-8", errors="replace")
+    chunk = blob[pos : pos + length]
+    if len(chunk) < length:
+        return None
+    return chunk.decode("utf-8", errors="replace")
