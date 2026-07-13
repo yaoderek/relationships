@@ -69,3 +69,79 @@ def who_said_it(request: Request):
             "date": window[0][2],
         }
     raise HTTPException(404, "not enough message history for this game")
+
+
+@router.get("/games/finish-the-convo")
+def finish_the_convo(request: Request):
+    db = request.app.state.db_path
+    top = _top_persons(db)
+    if not top:
+        raise HTTPException(404, "not enough contacts for this game")
+    top_names = dict(top)
+    candidates = run(db, """
+        WITH ordered AS (
+            SELECT m.msg_id, m.chat_id, m.person_id, m.is_from_me,
+                   trim(m.text) AS text, m.session_id,
+                   row_number() OVER w AS rn,
+                   lag(m.is_from_me) OVER w AS prev_from_me,
+                   lag(m.session_id) OVER w AS prev_session,
+                   row_number() OVER (PARTITION BY m.chat_id, m.session_id
+                                      ORDER BY m.ts_utc) AS srn
+            FROM messages m
+            JOIN chats c ON c.chat_id = m.chat_id AND NOT c.is_group
+            WHERE m.text IS NOT NULL
+            WINDOW w AS (PARTITION BY m.chat_id ORDER BY m.ts_utc)
+        )
+        SELECT msg_id, chat_id, person_id, rn, text FROM ordered
+        WHERE is_from_me AND len(text) >= 8
+              AND prev_from_me = FALSE AND prev_session = session_id
+              AND srn >= 5""")
+    candidates = [c for c in candidates if c[2] in top_names]
+    if not candidates:
+        raise HTTPException(404, "not enough message history for this game")
+    for _ in range(_ATTEMPTS):
+        msg_id, chat_id, person_id, rn, reply = random.choice(candidates)
+        rows = run(db, """
+            WITH ordered AS (
+                SELECT trim(m.text) AS text, m.is_from_me,
+                       strftime(date_trunc('day', m.ts_local), '%Y-%m-%d') AS d,
+                       row_number() OVER (PARTITION BY m.chat_id
+                                          ORDER BY m.ts_utc) AS rn
+                FROM messages m
+                JOIN chats c ON c.chat_id = m.chat_id AND NOT c.is_group
+                WHERE m.text IS NOT NULL AND m.chat_id = ?
+            )
+            SELECT text, is_from_me, d, rn FROM ordered
+            WHERE rn BETWEEN ? AND ? ORDER BY rn""",
+            [chat_id, rn - 4, rn + 3])
+        context = [r for r in rows if r[3] < rn]
+        aftermath = [r for r in rows if r[3] > rn]
+        lo, hi = int(len(reply) * 0.6), int(len(reply) * 1.4) + 1
+        pool = run(db, """
+            SELECT DISTINCT trim(text) FROM messages
+            WHERE is_from_me AND text IS NOT NULL AND chat_id <> ?
+                  AND len(trim(text)) BETWEEN ? AND ?
+            ORDER BY random() LIMIT 12""", [chat_id, lo, hi])
+        seen = {reply.lower()}
+        distractors = []
+        for (t,) in pool:
+            if t.lower() not in seen:
+                seen.add(t.lower())
+                distractors.append(t)
+            if len(distractors) == 3:
+                break
+        if len(distractors) < 3:
+            continue
+        options = [reply, *distractors]
+        random.shuffle(options)
+        return {
+            "context": [{"text": t, "is_from_me": bool(f)}
+                        for t, f, _, _ in context],
+            "options": options,
+            "answer_index": options.index(reply),
+            "person_name": top_names[person_id],
+            "date": context[-1][2],
+            "aftermath": [{"text": t, "is_from_me": bool(f)}
+                          for t, f, _, _ in aftermath],
+        }
+    raise HTTPException(404, "not enough message history for this game")

@@ -104,3 +104,29 @@ def test_who_said_it_404_when_too_few_contacts(client):
     # conftest fixture has only 2 contacts (< 4 needed for choices)
     r = client.get("/api/games/who-said-it")
     assert r.status_code == 404
+
+
+def test_finish_the_convo_round(games_client):
+    r = games_client.get("/api/games/finish-the-convo")
+    assert r.status_code == 200
+    round_ = r.json()
+    # Only one candidate exists in the fixture: Alice chat, reply m6.
+    assert round_["person_name"] == "Alice"
+    assert round_["date"] == "2024-06-01"
+    context = round_["context"]
+    assert len(context) == 4
+    assert context[-1]["is_from_me"] is False
+    options = round_["options"]
+    assert len(options) == 4
+    assert len({o.lower() for o in options}) == 4
+    assert options[round_["answer_index"]] == "sounds good see you there"
+    distractor_pool = {"omw give me ten minutes", "haha that was so funny dude",
+                       "nah i cant make it tonight", "lets grab food tomorrow"}
+    others = [o for i, o in enumerate(options) if i != round_["answer_index"]]
+    assert set(others) <= distractor_pool
+    assert round_["aftermath"] == [
+        {"text": "here now come outside", "is_from_me": False}]
+
+
+def test_finish_the_convo_404_on_small_db(client):
+    assert client.get("/api/games/finish-the-convo").status_code == 404
