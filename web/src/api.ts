@@ -169,3 +169,34 @@ export const fetchGroupMemberStats = (id: number, personId: number) =>
 export const fetchGroupMemberSeries = (id: number, personId: number, bucket: Bucket) =>
   get<MemberSeriesPoint[]>(
     `/api/groups/${id}/members/${personId}/timeseries?bucket=${bucket}`);
+
+export type GameMessage = { text: string; is_from_me: boolean };
+export type GameChoice = { person_id: number; display_name: string };
+export type WhoSaidItRound = {
+  messages: GameMessage[]; choices: GameChoice[];
+  answer_person_id: number; date: string;
+};
+export type FinishConvoRound = {
+  context: GameMessage[]; options: string[]; answer_index: number;
+  person_name: string; date: string; aftermath: GameMessage[];
+};
+export type WhoSaysItMoreChoice = {
+  person_id: number; display_name: string; count: number; per_1k: number;
+};
+export type WhoSaysItMoreRound = {
+  word: string; choices: WhoSaysItMoreChoice[]; answer_person_id: number;
+};
+
+async function getOrNull<T>(url: string): Promise<T | null> {
+  const res = await fetch(url);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`${res.status} ${url}`);
+  return res.json();
+}
+
+export const fetchWhoSaidIt = () =>
+  getOrNull<WhoSaidItRound>("/api/games/who-said-it");
+export const fetchFinishConvo = () =>
+  getOrNull<FinishConvoRound>("/api/games/finish-the-convo");
+export const fetchWhoSaysItMore = () =>
+  getOrNull<WhoSaysItMoreRound>("/api/games/who-says-it-more");

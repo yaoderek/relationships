@@ -1,5 +1,6 @@
 import { Link, Route, Routes } from "react-router-dom";
 import Compare from "./pages/Compare";
+import Games from "./pages/Games";
 import GroupDetail from "./pages/GroupDetail";
 import GroupMember from "./pages/GroupMember";
 import Groups from "./pages/Groups";
@@ -24,12 +25,14 @@ export default function App() {
           <Link to="/groups">Groups</Link>
           <Link to="/you">You</Link>
           <Link to="/language">Language</Link>
+          <Link to="/games">Games</Link>
         </nav>
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/people" element={<People />} />
           <Route path="/you" element={<You />} />
           <Route path="/language" element={<Language />} />
+          <Route path="/games" element={<Games />} />
           <Route path="/person/:id" element={<Person />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/groups" element={<Groups />} />
