@@ -47,11 +47,12 @@ const LOADING = <p>Loading round…</p>;
 function choiceStyle(state: "idle" | "correct" | "wrong" | "dim") {
   return {
     display: "block", width: "100%", textAlign: "left" as const,
-    padding: "8px 12px", marginBottom: 8, borderRadius: 8,
-    border: "1px solid #ccc", cursor: state === "idle" ? "pointer" : "default",
-    background: state === "correct" ? "#c8f7c5"
-      : state === "wrong" ? "#f7c5c5" : "#fff",
-    opacity: state === "dim" ? 0.6 : 1,
+    padding: "8px 12px", marginBottom: 8, borderRadius: 8, font: "inherit",
+    border: "1px solid rgba(128,128,128,0.35)", color: "inherit",
+    cursor: state === "idle" ? "pointer" : "default",
+    background: state === "correct" ? "rgba(46,204,64,0.25)"
+      : state === "wrong" ? "rgba(255,65,54,0.25)" : "transparent",
+    opacity: state === "dim" ? 0.55 : 1,
   };
 }
 
