@@ -11,6 +11,8 @@ _TOP_N = 20
 _ATTEMPTS = 20
 _MIN_WORD_USES = 3
 _MIN_RATE_RATIO = 1.5
+_EMBED_DIMS = 256
+_NEAR_DUPLICATE_SIM = 0.95
 
 
 def _top_persons(db) -> list[tuple[int, str]]:
@@ -74,6 +76,43 @@ def who_said_it(request: Request):
     raise HTTPException(404, "not enough message history for this game")
 
 
+def _embedding_distractors(request: Request, reply: str) -> list[str]:
+    """Replies I actually sent that mean something close to the real reply.
+
+    Uses the language.duckdb embeddings when available; returns [] when the
+    artifacts are missing or the reply was never embedded, so callers can
+    fall back to length matching.
+    """
+    lang_db = request.app.state.db_path.parent / "language.duckdb"
+    if not lang_db.exists():
+        return []
+    lo, hi = int(len(reply) * 0.5), int(len(reply) * 2.0) + 1
+    rows = run(lang_db, f"""
+        WITH target AS (
+            SELECT embedding FROM text_embeddings WHERE text = ? LIMIT 1
+        )
+        SELECT te.text,
+               array_cosine_similarity(
+                   te.embedding, (SELECT embedding FROM target)) AS sim
+        FROM text_embeddings te
+        WHERE te.mine > 0 AND lower(te.text) <> lower(?)
+              AND len(te.text) BETWEEN ? AND ?
+              AND EXISTS (SELECT 1 FROM target)
+        ORDER BY sim DESC LIMIT 40""", [reply, reply, lo, hi])
+    candidates = [t for t, sim in rows if sim is not None
+                  and sim < _NEAR_DUPLICATE_SIM]
+    seen: set[str] = {reply.lower()}
+    unique: list[str] = []
+    for t in candidates:
+        if t.lower() not in seen:
+            seen.add(t.lower())
+            unique.append(t)
+    if len(unique) < 3:
+        return []
+    # Sample from the closest ~25 so repeat rounds don't reuse one trio.
+    return random.sample(unique[:25], 3)
+
+
 @router.get("/games/finish-the-convo")
 def finish_the_convo(request: Request):
     db = request.app.state.db_path
@@ -119,20 +158,22 @@ def finish_the_convo(request: Request):
             [chat_id, rn - 4, rn + 3])
         context = [r for r in rows if r[3] < rn]
         aftermath = [r for r in rows if r[3] > rn]
-        lo, hi = int(len(reply) * 0.6), int(len(reply) * 1.4) + 1
-        pool = run(db, """
-            SELECT DISTINCT trim(text) FROM messages
-            WHERE is_from_me AND text IS NOT NULL AND chat_id <> ?
-                  AND len(trim(text)) BETWEEN ? AND ?
-            ORDER BY random() LIMIT 12""", [chat_id, lo, hi])
-        seen = {reply.lower()}
-        distractors = []
-        for (t,) in pool:
-            if t.lower() not in seen:
-                seen.add(t.lower())
-                distractors.append(t)
-            if len(distractors) == 3:
-                break
+        distractors = _embedding_distractors(request, reply)
+        if not distractors:
+            lo, hi = int(len(reply) * 0.6), int(len(reply) * 1.4) + 1
+            pool = run(db, """
+                SELECT DISTINCT trim(text) FROM messages
+                WHERE is_from_me AND text IS NOT NULL AND chat_id <> ?
+                      AND len(trim(text)) BETWEEN ? AND ?
+                ORDER BY random() LIMIT 12""", [chat_id, lo, hi])
+            seen = {reply.lower()}
+            distractors = []
+            for (t,) in pool:
+                if t.lower() not in seen:
+                    seen.add(t.lower())
+                    distractors.append(t)
+                if len(distractors) == 3:
+                    break
         if len(distractors) < 3:
             continue
         options = [reply, *distractors]
