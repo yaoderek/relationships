@@ -1,0 +1,8 @@
+# Copy to overrides.yaml (gitignored is fine) and edit.
+# merge: force several raw handles into one named person.
+merge:
+  - name: "Gym Buddy"
+    handles: ["+15551111111", "+15552222222"]
+# rename: change the display name for whoever owns a handle.
+rename:
+  "+15559990000": "Mom (old number)"
