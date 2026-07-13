@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { fetchPersonHeatmap, fetchPersonSeries, fetchPersonStats, fetchPersonTrends } from "../api";
+import { fetchPersonHeatmap, fetchPersonSeries, fetchPersonStats, fetchPersonTrends, fetchSignature } from "../api";
 import type { Bucket, PersonTrend } from "../api";
 import BucketPicker from "../components/BucketPicker";
 import Dropdown from "../components/Dropdown";
@@ -48,7 +48,9 @@ export default function Person() {
     [pid, bucket, includeGroups],
   );
   const heatmap = useFetch(() => fetchPersonHeatmap(pid), [pid]);
+  const signature = useFetch(() => fetchSignature(`person:${pid}`), [pid]);
   if (!stats) return <p>Loading…</p>;
+  const insideJokes = signature?.phrases ?? [];
 
   const first = stats.display_name.split(" ")[0];
   const metric = TREND_METRICS.find((m) => m.key === metricKey)!;
@@ -111,6 +113,24 @@ export default function Person() {
       <h2 id="p-vernacular">Vernacular</h2>
       <WordChips label={first} words={stats.top_words_them} />
       <WordChips label="You" words={stats.top_words_me} />
+      {insideJokes.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 14, marginBottom: 6 }}>
+            Phrases unique to you two
+          </h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {insideJokes.slice(0, 12).map((p) => (
+              <span key={p.phrase}
+                    style={{ fontSize: 13, padding: "3px 10px",
+                             borderRadius: 999,
+                             border: "1px solid rgba(91,143,249,0.5)",
+                             background: "rgba(91,143,249,0.10)" }}>
+                {p.phrase} <span style={{ opacity: 0.55 }}>×{p.count}</span>
+              </span>
+            ))}
+          </div>
+        </>
+      )}
       <h2 id="p-hotdays">Hottest days</h2>
       <HotDays personId={pid} />
     </>

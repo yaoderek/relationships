@@ -3,6 +3,7 @@ import Compare from "./pages/Compare";
 import GroupDetail from "./pages/GroupDetail";
 import GroupMember from "./pages/GroupMember";
 import Groups from "./pages/Groups";
+import Language from "./pages/Language";
 import Overview from "./pages/Overview";
 import People from "./pages/People";
 import Person from "./pages/Person";
@@ -22,11 +23,13 @@ export default function App() {
           <Link to="/compare">Compare</Link>
           <Link to="/groups">Groups</Link>
           <Link to="/you">You</Link>
+          <Link to="/language">Language</Link>
         </nav>
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/people" element={<People />} />
           <Route path="/you" element={<You />} />
+          <Route path="/language" element={<Language />} />
           <Route path="/person/:id" element={<Person />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/groups" element={<Groups />} />

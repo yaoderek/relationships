@@ -111,6 +111,30 @@ export const fetchCatchphrasesTimeline = () =>
   get<CatchphraseYear[]>("/api/you/catchphrases-timeline");
 export type CalendarDay = { date: string; count: number };
 export const fetchYouCalendar = () => get<CalendarDay[]>("/api/you/calendar");
+export type Topic = {
+  cluster_id: number; label: string; msg_count: number; share: number;
+  people: { name: string; share: number }[];
+};
+export const fetchTopics = () => get<Topic[]>("/api/language/topics");
+export type VoicePoint = {
+  person_id: number; name: string; msgs: number;
+  divergence: number; mirroring: number;
+};
+export const fetchVoice = () => get<VoicePoint[]>("/api/language/voice");
+export type DriftPoint = { month: string; drift: number | null; novelty: number | null };
+export const fetchDrift = () => get<DriftPoint[]>("/api/language/drift");
+export type SignatureScope = { scope: string; label: string };
+export const fetchSignatureScopes = () =>
+  get<SignatureScope[]>("/api/language/scopes");
+export type SignaturePhrase = { phrase: string; count: number; score: number };
+export const fetchSignature = (scope: string) =>
+  get<{ scope: string; phrases: SignaturePhrase[] }>(
+    `/api/language/signature?scope=${encodeURIComponent(scope)}`);
+export type SearchHit = {
+  text: string; total: number; mine: number; similarity: number;
+};
+export const fetchLanguageSearch = (q: string) =>
+  get<SearchHit[]>(`/api/language/search?q=${encodeURIComponent(q)}`);
 export type YouHotDay = {
   date: string; count: number; sent: number; top_contact: string | null;
 };

@@ -9,6 +9,7 @@ dependencies = [
     "emoji>=2.12",
     "pyyaml>=6.0",
     "httpx>=0.28.1",
+    "numpy>=2.4.6",
 ]
 
 [dependency-groups]
