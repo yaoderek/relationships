@@ -46,6 +46,30 @@ def you_vernacular_timeline(request: Request):
     return [{"bucket": y, "words": ws} for y, ws in sorted(out.items())]
 
 
+@router.get("/you/catchphrases-timeline")
+def you_catchphrases_timeline(request: Request):
+    rows = run(request.app.state.db_path, """
+        WITH s AS (
+            SELECT strftime(date_trunc('year', ts_local), '%Y') AS y,
+                   trim(text) AS t
+            FROM messages
+            WHERE is_from_me AND text IS NOT NULL AND len(trim(text)) >= 8
+        ),
+        counts AS (
+            SELECT y, t, count(*) AS c FROM s
+            GROUP BY 1, 2 HAVING count(*) >= 2
+        ),
+        ranked AS (
+            SELECT *, row_number() OVER (PARTITION BY y ORDER BY c DESC, t) AS rn
+            FROM counts
+        )
+        SELECT y, t, c FROM ranked WHERE rn <= 5 ORDER BY y, rn""")
+    out: dict[str, list] = {}
+    for y, t, c in rows:
+        out.setdefault(y, []).append({"text": t, "count": c})
+    return [{"bucket": y, "sentences": s} for y, s in sorted(out.items())]
+
+
 @router.get("/you/hot-days")
 def you_hot_days(request: Request, limit: int = 10):
     rows = run(request.app.state.db_path, """

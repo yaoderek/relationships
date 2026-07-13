@@ -26,6 +26,11 @@ def test_you_vernacular_timeline(client):
     assert {"morning", "sup", "squad"} <= words
 
 
+def test_you_catchphrases_timeline(client):
+    # nothing in the fixture is sent twice, so no catchphrases exist
+    assert client.get("/api/you/catchphrases-timeline").json() == []
+
+
 def test_you_hot_days(client):
     days = client.get("/api/you/hot-days").json()
     assert days[0]["date"] == "2024-06-01"

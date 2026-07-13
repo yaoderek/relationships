@@ -106,6 +106,9 @@ export const fetchWordContext = (word: string) =>
 export type VernacularYear = { bucket: string; words: WordCount[] };
 export const fetchVernacularTimeline = () =>
   get<VernacularYear[]>("/api/you/vernacular-timeline");
+export type CatchphraseYear = { bucket: string; sentences: SentenceCount[] };
+export const fetchCatchphrasesTimeline = () =>
+  get<CatchphraseYear[]>("/api/you/catchphrases-timeline");
 export type YouHotDay = {
   date: string; count: number; sent: number; top_contact: string | null;
 };

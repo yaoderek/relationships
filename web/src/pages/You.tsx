@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fetchVernacularTimeline, fetchWordContext, fetchYou, fetchYouHotDays } from "../api";
+import { fetchCatchphrasesTimeline, fetchWordContext, fetchYou, fetchYouHotDays } from "../api";
 import type { SentenceCount } from "../api";
 import BlobField from "../components/BlobField";
 import Heatmap from "../components/Heatmap";
@@ -11,15 +11,15 @@ const SECTIONS = [
   { id: "you-stats", label: "Your stats" },
   { id: "you-universe", label: "Universe" },
   { id: "you-vernacular", label: "Vernacular" },
-  { id: "you-evolution", label: "Over the years" },
-  { id: "you-catchphrases", label: "Catchphrases" },
+  { id: "you-evolution", label: "Catchphrases by year" },
+  { id: "you-catchphrases", label: "All-time catchphrases" },
   { id: "you-heatmap", label: "When you text" },
   { id: "you-busiest", label: "Busiest days" },
 ];
 
 export default function You() {
   const stats = useFetch(fetchYou, []);
-  const evolution = useFetch(fetchVernacularTimeline, []);
+  const evolution = useFetch(fetchCatchphrasesTimeline, []);
   const hotDays = useFetch(fetchYouHotDays, []);
   const [word, setWord] = useState<string | null>(null);
   const [sentences, setSentences] = useState<SentenceCount[] | null>(null);
@@ -115,24 +115,25 @@ export default function You() {
         </div>
       </div>
 
-      <h2 id="you-evolution">How you spoke, year by year</h2>
+      <h2 id="you-evolution">Your catchphrases, year by year</h2>
       <div style={{ display: "flex", gap: 10, overflowX: "auto",
                     paddingBottom: 8 }}>
         {(evolution ?? []).map((y) => (
           <div key={y.bucket}
-               style={{ minWidth: 130, padding: "10px 12px",
+               style={{ minWidth: 220, maxWidth: 260, padding: "10px 12px",
                         border: "1px solid rgba(128,128,128,0.25)",
                         borderRadius: 10 }}>
             <div style={{ fontWeight: 650, marginBottom: 6 }}>{y.bucket}</div>
-            {y.words.map((w, i) => (
-              <div key={w.word}
+            {y.sentences.map((s, i) => (
+              <div key={s.text}
                    style={{ display: "flex", justifyContent: "space-between",
-                            gap: 8, fontSize: 13, padding: "2px 0",
-                            opacity: 1 - i * 0.08 }}>
-                <span>{w.word}</span>
+                            gap: 8, fontSize: 13, padding: "3px 0",
+                            opacity: 1 - i * 0.1 }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                               whiteSpace: "nowrap" }}>“{s.text}”</span>
                 <span style={{ opacity: 0.55,
                                fontVariantNumeric: "tabular-nums" }}>
-                  {w.count.toLocaleString()}
+                  ×{s.count}
                 </span>
               </div>
             ))}
@@ -142,7 +143,7 @@ export default function You() {
 
       {stats.top_sentences.length > 0 && (
         <>
-          <h2 id="you-catchphrases">Your catchphrases</h2>
+          <h2 id="you-catchphrases">All-time catchphrases</h2>
           {stats.top_sentences.map((s) => (
             <div key={s.text}
                  style={{ display: "flex", justifyContent: "space-between",

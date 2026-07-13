@@ -12,22 +12,31 @@ export default function Spine({ sections }: { sections: SpineSection[] }) {
   }, []);
 
   useEffect(() => {
-    const obs = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) setActive(e.target.id);
-        }
-      },
-      { rootMargin: "-15% 0px -70% 0px" },
-    );
-    for (const s of sections) {
-      const el = document.getElementById(s.id);
-      if (el) obs.observe(el);
-    }
-    return () => obs.disconnect();
+    if (sections.length < 2) return;
+    // Active section = the last one whose top has passed a line 25% down the
+    // viewport; pinned to the final section once scrolled to the bottom.
+    const onScroll = () => {
+      const line = window.innerHeight * 0.25;
+      let current = sections[0].id;
+      for (const s of sections) {
+        const el = document.getElementById(s.id);
+        if (el && el.getBoundingClientRect().top <= line) current = s.id;
+      }
+      const atBottom = window.innerHeight + window.scrollY
+        >= document.documentElement.scrollHeight - 4;
+      if (atBottom) current = sections[sections.length - 1].id;
+      setActive(current);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
   }, [sections]);
 
-  if (!slot) return null;
+  if (!slot || sections.length < 2) return null;
   return createPortal(
     <nav className="spine" aria-label="Page sections">
       {sections.map((s) => (
