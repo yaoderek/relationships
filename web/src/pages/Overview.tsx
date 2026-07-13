@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { fetchCompare, fetchOverviewSeries, fetchPersons } from "../api";
 import type { Bucket, PersonSummary } from "../api";
 import BucketPicker from "../components/BucketPicker";
+import Dropdown from "../components/Dropdown";
 import ArcsChart from "../components/ArcsChart";
 import Leaderboard from "../components/Leaderboard";
 import TimeSeries from "../components/TimeSeries";
@@ -59,15 +60,15 @@ export default function Overview() {
       <h2>Relationship arcs — top 10 people, monthly</h2>
       {arcs && arcs.length > 0 && <ArcsChart data={arcs} />}
       <h2>Top people (1:1 messages)</h2>
-      <label style={{ fontSize: 13 }}>
-        sort by{" "}
-        <select value={sortKey}
-                onChange={(e) => setSortKey(e.target.value as SortMetric["key"])}>
-          {SORT_METRICS.map((m) => (
-            <option key={m.key} value={m.key}>{m.label}</option>
-          ))}
-        </select>
-      </label>
+      <div style={{ display: "flex", alignItems: "center", gap: 8,
+                    margin: "4px 0 12px" }}>
+        <span style={{ fontSize: 13, opacity: 0.7 }}>sort by</span>
+        <Dropdown
+          value={sortKey}
+          options={SORT_METRICS.map((m) => ({ value: m.key, label: m.label }))}
+          onChange={(v) => setSortKey(v as SortMetric["key"])}
+        />
+      </div>
       {persons && (
         <Leaderboard
           rows={rows.map((p) => {

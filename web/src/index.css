@@ -4,3 +4,8 @@ a { color: inherit; }
 button { cursor: pointer; }
 h1 { font-size: 24px; }
 h2 { font-size: 17px; margin-top: 28px; }
+.dd-option:hover { background: rgba(128, 128, 128, 0.15); }
+.lb-row:hover { background: rgba(128, 128, 128, 0.08); }
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; }
+}
