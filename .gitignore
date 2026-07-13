@@ -1,3 +1,6 @@
 .DS_Store
 data/
 .superpowers/
+__pycache__/
+*.pyc
+.venv/
