@@ -6,6 +6,35 @@ h1 { font-size: 24px; }
 h2 { font-size: 17px; margin-top: 28px; }
 .dd-option:hover { background: rgba(128, 128, 128, 0.15); }
 .next-round:hover { background: rgba(128, 128, 128, 0.12); }
+.bubble {
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 16px;
+  margin-bottom: 6px;
+}
+.bubble-me { background: light-dark(#007aff, #0a84ff); color: #fff; }
+.bubble-them {
+  background: light-dark(#e9e9eb, #3b3b3d);
+  color: light-dark(#000, #fff);
+}
+@keyframes round-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.game-round { animation: round-in 0.3s ease both; }
+.game-reveal { animation: round-in 0.25s ease both; }
+@keyframes choice-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+.choice-correct { animation: choice-pop 0.3s ease; }
+@keyframes choice-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.choice-wrong { animation: choice-shake 0.25s ease; }
 .lb-row:hover { background: rgba(128, 128, 128, 0.08); }
 .spine-rail,
 .spine-balance {

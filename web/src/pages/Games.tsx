@@ -32,11 +32,9 @@ function Bubble({ m }: { m: GameMessage }) {
   return (
     <div style={{ display: "flex",
                   justifyContent: m.is_from_me ? "flex-end" : "flex-start" }}>
-      <div style={{
-        maxWidth: "70%", padding: "8px 12px", borderRadius: 16, marginBottom: 6,
-        background: m.is_from_me ? "#0b93f6" : "#e5e5ea",
-        color: m.is_from_me ? "#fff" : "#000",
-      }}>{m.text}</div>
+      <div className={`bubble ${m.is_from_me ? "bubble-me" : "bubble-them"}`}>
+        {m.text}
+      </div>
     </div>
   );
 }
@@ -58,7 +56,9 @@ function NextButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function choiceStyle(state: "idle" | "correct" | "wrong" | "dim") {
+type ChoiceState = "idle" | "correct" | "wrong" | "dim";
+
+function choiceStyle(state: ChoiceState) {
   return {
     display: "block", width: "100%", textAlign: "left" as const,
     padding: "8px 12px", marginBottom: 8, borderRadius: 8, font: "inherit",
@@ -67,7 +67,14 @@ function choiceStyle(state: "idle" | "correct" | "wrong" | "dim") {
     background: state === "correct" ? "rgba(46,204,64,0.25)"
       : state === "wrong" ? "rgba(255,65,54,0.25)" : "transparent",
     opacity: state === "dim" ? 0.55 : 1,
+    transition: "background 0.25s ease, opacity 0.25s ease",
   };
+}
+
+function choiceClass(state: ChoiceState) {
+  if (state === "correct") return "choice-correct";
+  if (state === "wrong") return "choice-wrong";
+  return "";
 }
 
 function WhoSaidIt({ onResult }: { onResult: (ok: boolean) => void }) {
@@ -84,24 +91,25 @@ function WhoSaidIt({ onResult }: { onResult: (ok: boolean) => void }) {
   const answer = round.choices.find(
     (c) => c.person_id === round.answer_person_id);
   return (
-    <div>
+    <div className="game-round">
       <p>Who are you texting with here?</p>
       <div style={{ margin: "16px 0" }}>
         {round.messages.map((m, i) => <Bubble key={i} m={m} />)}
       </div>
       {round.choices.map((c) => {
-        const state = picked === null ? "idle"
+        const state: ChoiceState = picked === null ? "idle"
           : c.person_id === round.answer_person_id ? "correct"
           : c.person_id === picked ? "wrong" : "dim";
         return (
           <button key={c.person_id} style={choiceStyle(state)}
+                  className={choiceClass(state)}
                   onClick={() => pick(c.person_id)}>
             {c.display_name}
           </button>
         );
       })}
       {picked !== null && (
-        <div style={{ marginTop: 12 }}>
+        <div className="game-reveal" style={{ marginTop: 12 }}>
           <p>It was <b>{answer?.display_name}</b> — {round.date}.</p>
           <NextButton onClick={next} />
         </div>
@@ -122,23 +130,24 @@ function FinishConvo({ onResult }: { onResult: (ok: boolean) => void }) {
     onResult(i === round.answer_index);
   };
   return (
-    <div>
+    <div className="game-round">
       <p>What did you actually say next?</p>
       <div style={{ margin: "16px 0" }}>
         {round.context.map((m, i) => <Bubble key={i} m={m} />)}
       </div>
       {round.options.map((o, i) => {
-        const state = picked === null ? "idle"
+        const state: ChoiceState = picked === null ? "idle"
           : i === round.answer_index ? "correct"
           : i === picked ? "wrong" : "dim";
         return (
-          <button key={i} style={choiceStyle(state)} onClick={() => pick(i)}>
+          <button key={i} style={choiceStyle(state)}
+                  className={choiceClass(state)} onClick={() => pick(i)}>
             {o}
           </button>
         );
       })}
       {picked !== null && (
-        <div style={{ marginTop: 12 }}>
+        <div className="game-reveal" style={{ marginTop: 12 }}>
           <p>That was <b>{round.person_name}</b> — {round.date}.
              {round.aftermath.length > 0 && " And then:"}</p>
           {round.aftermath.map((m, i) => <Bubble key={i} m={m} />)}
@@ -161,17 +170,18 @@ function WhoSaysItMore({ onResult }: { onResult: (ok: boolean) => void }) {
     onResult(id === round.answer_person_id);
   };
   return (
-    <div>
+    <div className="game-round">
       <p>Who says this more (per 1,000 texts)?</p>
       <p style={{ fontSize: 32, fontWeight: 700, margin: "16px 0" }}>
         “{round.word}”
       </p>
       {round.choices.map((c) => {
-        const state = picked === null ? "idle"
+        const state: ChoiceState = picked === null ? "idle"
           : c.person_id === round.answer_person_id ? "correct"
           : c.person_id === picked ? "wrong" : "dim";
         return (
           <button key={c.person_id} style={choiceStyle(state)}
+                  className={choiceClass(state)}
                   onClick={() => pick(c.person_id)}>
             {c.display_name}
             {picked !== null &&
@@ -179,7 +189,11 @@ function WhoSaysItMore({ onResult }: { onResult: (ok: boolean) => void }) {
           </button>
         );
       })}
-      {picked !== null && <div style={{ marginTop: 12 }}><NextButton onClick={next} /></div>}
+      {picked !== null && (
+        <div className="game-reveal" style={{ marginTop: 12 }}>
+          <NextButton onClick={next} />
+        </div>
+      )}
     </div>
   );
 }
