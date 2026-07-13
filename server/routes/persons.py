@@ -17,6 +17,7 @@ _LIST_SQL = """
         FROM messages m
         JOIN chats c ON c.chat_id = m.chat_id AND NOT c.is_group
         JOIN chat_members cm ON cm.chat_id = m.chat_id
+        {msg_filter}
     ),
     base AS (
         SELECT person_id,
@@ -101,12 +102,16 @@ _LIST_SQL = """
     JOIN block_agg bl ON bl.person_id = p.person_id
     JOIN dt_agg d ON d.person_id = p.person_id
     LEFT JOIN streaks st ON st.person_id = p.person_id
+    WHERE p.display_name NOT LIKE 'urn:%'
     ORDER BY b.total DESC
 """
 
 
 @router.get("/persons")
-def list_persons(request: Request):
+def list_persons(request: Request, days: int | None = None):
+    sql = _LIST_SQL.format(
+        msg_filter="WHERE m.ts_local >= current_timestamp - INTERVAL 1 DAY * ?"
+                   if days else "")
     return [
         {"person_id": r[0], "display_name": r[1], "total": r[2], "sent": r[3],
          "received": r[4], "first_ts": r[5], "last_ts": r[6],
@@ -116,7 +121,7 @@ def list_persons(request: Request):
          "ghosts_by_me": r[13], "avg_reply_block_me": r[14],
          "avg_reply_block_them": r[15], "double_texts_me": r[16],
          "double_texts_them": r[17], "streak_days": r[18]}
-        for r in run(request.app.state.db_path, _LIST_SQL)
+        for r in run(request.app.state.db_path, sql, [days] if days else [])
     ]
 
 

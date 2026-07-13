@@ -8,6 +8,12 @@ def test_persons_leaderboard(client):
     assert alice["last_ts"].startswith("2024-06-02")
 
 
+def test_persons_time_window(client):
+    assert len(client.get("/api/persons").json()) == 2
+    # fixture data is from 2024, so a 30-day window excludes everyone
+    assert client.get("/api/persons?days=30").json() == []
+
+
 def test_persons_leaderboard_metrics(client):
     people = client.get("/api/persons").json()
     alice = next(p for p in people if p["display_name"] == "Alice Smith")

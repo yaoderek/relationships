@@ -82,7 +82,8 @@ async function get<T>(url: string): Promise<T> {
   return res.json();
 }
 
-export const fetchPersons = () => get<PersonSummary[]>("/api/persons");
+export const fetchPersons = (days?: number | null) =>
+  get<PersonSummary[]>(`/api/persons${days ? `?days=${days}` : ""}`);
 export const fetchOverviewSeries = (bucket: Bucket) =>
   get<SeriesPoint[]>(`/api/overview/timeseries?bucket=${bucket}`);
 export const fetchPersonSeries = (id: number, bucket: Bucket, includeGroups = false) =>
@@ -101,7 +102,8 @@ export const fetchDaySummary = (id: number, date: string) =>
   get<DaySummary>(`/api/persons/${id}/day-summary?date=${date}`);
 export const fetchCompare = (ids: number[], bucket: Bucket) =>
   get<CompareSeries[]>(`/api/compare?ids=${ids.join(",")}&bucket=${bucket}`);
-export const fetchGroups = () => get<GroupSummary[]>("/api/groups");
+export const fetchGroups = (days?: number | null) =>
+  get<GroupSummary[]>(`/api/groups${days ? `?days=${days}` : ""}`);
 export const fetchGroupSeries = (id: number, bucket: Bucket) =>
   get<GroupSeriesPoint[]>(`/api/groups/${id}/timeseries?bucket=${bucket}`);
 export const fetchGroupHeatmap = (id: number) =>

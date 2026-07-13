@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { fetchPersons } from "../api";
 import type { PersonSummary } from "../api";
 import Dropdown from "../components/Dropdown";
+import FilterPanel from "../components/FilterPanel";
+import type { RangeDays } from "../components/FilterPanel";
 import Leaderboard from "../components/Leaderboard";
 import { fmtDuration, fmtPercent } from "../lib/format";
 import { useFetch } from "../lib/useFetch";
@@ -49,11 +51,15 @@ function badge(p: PersonSummary):
 export default function People() {
   const navigate = useNavigate();
   const [sortKey, setSortKey] = useState<SortMetric["key"]>("total");
-  const persons = useFetch(fetchPersons, []);
+  const [range, setRange] = useState<RangeDays>(null);
+  const [hideInactive, setHideInactive] = useState(false);
+  const persons = useFetch(() => fetchPersons(range), [range]);
   const metric = SORT_METRICS.find((m) => m.key === sortKey)!;
   const value = (p: PersonSummary) => p[metric.key] as number | null;
   // Rank within the top 100 by volume so tiny chats don't dominate ratio metrics.
   const rows = (persons ?? [])
+    .filter((p) => !hideInactive
+      || (Date.now() - new Date(p.last_ts).getTime()) / DAY_MS <= 30)
     .slice(0, 100)
     .sort((a, b) => (value(b) ?? -Infinity) - (value(a) ?? -Infinity));
   return (
@@ -67,6 +73,9 @@ export default function People() {
           options={SORT_METRICS.map((m) => ({ value: m.key, label: m.label }))}
           onChange={(v) => setSortKey(v as SortMetric["key"])}
         />
+        <FilterPanel range={range} onRange={setRange}
+                     hideInactive={hideInactive}
+                     onHideInactive={setHideInactive} />
       </div>
       {persons && (
         <Leaderboard

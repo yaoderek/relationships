@@ -14,7 +14,7 @@ _LIST_SQL = """
                / count(m.msg_id) AS my_share,
            min(m.ts_local) AS first_ts, max(m.ts_local) AS last_ts
     FROM chats c JOIN messages m ON m.chat_id = c.chat_id
-    WHERE c.is_group
+    WHERE c.is_group {msg_filter}
     GROUP BY 1, 2, 3
     ORDER BY total DESC
 """
@@ -29,11 +29,14 @@ def _require_group(db, chat_id: int) -> str:
 
 
 @router.get("/groups")
-def list_groups(request: Request):
+def list_groups(request: Request, days: int | None = None):
+    sql = _LIST_SQL.format(
+        msg_filter="AND m.ts_local >= current_timestamp - INTERVAL 1 DAY * ?"
+                   if days else "")
     return [
         {"chat_id": r[0], "name": r[1], "participants": r[2], "total": r[3],
          "my_share": r[4], "first_ts": r[5], "last_ts": r[6]}
-        for r in run(request.app.state.db_path, _LIST_SQL)
+        for r in run(request.app.state.db_path, sql, [days] if days else [])
     ]
 
 

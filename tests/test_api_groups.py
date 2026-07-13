@@ -15,6 +15,11 @@ def test_group_leaderboard(client):
     assert g["my_share"] == pytest.approx(1 / 3)
 
 
+def test_groups_time_window(client):
+    assert len(client.get("/api/groups").json()) == 1
+    assert client.get("/api/groups?days=30").json() == []
+
+
 def test_group_timeseries(client):
     gid = _squad_id(client)
     series = client.get(f"/api/groups/{gid}/timeseries?bucket=day").json()
