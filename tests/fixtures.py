@@ -55,3 +55,22 @@ def make_chat_db(path: Path, handles, chats, chat_handles, messages, attachments
         conn.execute("INSERT INTO message_attachment_join VALUES (?,?)", (msg_id, i))
     conn.commit()
     conn.close()
+
+
+def make_addressbook_db(path: Path, people):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE ZABCDRECORD (Z_PK INTEGER PRIMARY KEY, ZFIRSTNAME TEXT,
+                                  ZLASTNAME TEXT, ZORGANIZATION TEXT);
+        CREATE TABLE ZABCDPHONENUMBER (ZOWNER INTEGER, ZFULLNUMBER TEXT);
+        CREATE TABLE ZABCDEMAILADDRESS (ZOWNER INTEGER, ZADDRESS TEXT);
+    """)
+    for pk, (first, last, phones, emails) in enumerate(people, start=1):
+        conn.execute("INSERT INTO ZABCDRECORD VALUES (?,?,?,NULL)", (pk, first, last))
+        conn.executemany("INSERT INTO ZABCDPHONENUMBER VALUES (?,?)",
+                         [(pk, p) for p in phones])
+        conn.executemany("INSERT INTO ZABCDEMAILADDRESS VALUES (?,?)",
+                         [(pk, e) for e in emails])
+    conn.commit()
+    conn.close()
