@@ -25,9 +25,18 @@ OUT = Path("data/language.duckdb")
 EMBED_MODEL = "text-embedding-3-small"
 DIMS = 256
 BATCH = 1000
-K_CLUSTERS = 14
 TOP_PERSONS_VOICE = 30
 TOP_PERSONS_PHRASES = 20
+
+# Topic clustering: only "contentful" texts (interjections drown out topics),
+# with the dominant register/tone directions projected out so clusters split
+# by subject matter instead of formality.
+CONTENT_MIN_CHARS = 18
+CONTENT_MIN_WORDS = 4
+DEBIAS_COMPONENTS = 3
+K_MIN, K_MAX = 8, 24
+EIGEN_SAMPLE = 3000
+EIGEN_KNN = 15
 
 
 def embed_texts(texts: list[str], api_key: str) -> np.ndarray:
@@ -80,6 +89,44 @@ def kmeans(x: np.ndarray, k: int, iters: int = 25, seed: int = 0):
     return assign, c
 
 
+def debias(x: np.ndarray, n_components: int) -> np.ndarray:
+    """All-but-the-top (Mu & Viswanath 2018): remove the mean and the top
+    principal components. In message embeddings those directions encode
+    register/tone ("casual short reply"-ness), so removing them lets
+    clustering split on subject matter instead."""
+    centered = x - x.mean(0)
+    cov = centered.T @ centered / len(centered)
+    _vals, vecs = np.linalg.eigh(cov)          # eigenvalues ascending
+    top = vecs[:, -n_components:]
+    projected = centered - (centered @ top) @ top.T
+    norms = np.linalg.norm(projected, axis=1, keepdims=True)
+    return projected / np.maximum(norms, 1e-9)
+
+
+def eigengap_k(x: np.ndarray, k_min: int, k_max: int,
+               sample: int, knn: int, seed: int = 0) -> int:
+    """Eigengap heuristic: eigenvalues of the normalized Laplacian of a kNN
+    cosine-similarity graph (on a sample); k = largest gap in [k_min, k_max]."""
+    rng = np.random.default_rng(seed)
+    idx = rng.choice(len(x), size=min(sample, len(x)), replace=False)
+    s = x[idx]
+    n = len(s)
+    sim = s @ s.T
+    np.fill_diagonal(sim, -np.inf)
+    nn = np.argpartition(-sim, knn, axis=1)[:, :knn]
+    w = np.zeros((n, n), dtype=np.float32)
+    rows = np.repeat(np.arange(n), knn)
+    cols = nn.ravel()
+    w[rows, cols] = np.maximum(sim[rows, cols], 0)
+    w = np.maximum(w, w.T)
+    d_inv_sqrt = 1 / np.sqrt(np.maximum(w.sum(1), 1e-9))
+    lap = np.eye(n, dtype=np.float32) - (w * d_inv_sqrt[:, None]) * d_inv_sqrt
+    evals = np.linalg.eigvalsh(lap)
+    ks = np.arange(k_min, min(k_max, n - 1) + 1)
+    gaps = evals[ks] - evals[ks - 1]
+    return int(ks[np.argmax(gaps)])
+
+
 def _silhouette(x: np.ndarray, assign: np.ndarray, k: int) -> float:
     d = 1 - x @ x.T
     scores = []
@@ -120,6 +167,10 @@ def label_cluster(samples: list[str], api_key: str) -> str:
               "messages": [
                   {"role": "system",
                    "content": "You name topic clusters of casual text messages. "
+                              "Name the SUBJECT MATTER being discussed (e.g. "
+                              "'consulting recruiting', 'gym plans', 'course "
+                              "registration'), never the tone or style — "
+                              "labels like 'casual replies' are useless. "
                               'Reply with JSON {"label": "2-4 word label"}. '
                               "Be concrete, lowercase, no punctuation."},
                   {"role": "user", "content": "\n".join(samples)},
@@ -193,7 +244,7 @@ def main(people_only: bool = False) -> None:
         prev = duckdb.connect(str(OUT), read_only=True)
         try:
             tbl = prev.execute(
-                "SELECT text, embedding FROM text_embeddings").fetch_arrow_table()
+                "SELECT text, embedding FROM text_embeddings").to_arrow_table()
             prev_texts = tbl["text"].to_pylist()
             cached_emb = np.asarray(
                 tbl["embedding"].combine_chunks().flatten(),
@@ -225,23 +276,42 @@ def main(people_only: bool = False) -> None:
     cluster_rows, cluster_people_rows = [], []
     voice_rows, drift_rows, sig_rows = [], [], []
     assign = None
+    n_topics = 0
     if not people_only:
-        print("clustering…")
-        assign, _ = kmeans(emb, K_CLUSTERS)
+        # Interjections ("lol", "ok bet") dominate raw message volume and the
+        # top embedding directions encode tone, so cluster only contentful
+        # texts on debiased vectors — that surfaces what is being talked
+        # about, not how casually.
+        content_idx = np.array(
+            [i for i, t in enumerate(texts)
+             if len(t) >= CONTENT_MIN_CHARS
+             and len(t.split()) >= CONTENT_MIN_WORDS],
+            dtype=np.int64)
+        x = debias(emb[content_idx], DEBIAS_COMPONENTS)
+        n_topics = eigengap_k(x, K_MIN, K_MAX, EIGEN_SAMPLE, EIGEN_KNN)
+        print(f"clustering {len(content_idx):,} contentful texts "
+              f"into {n_topics} topics (eigengap)…", flush=True)
+        assign_content, _ = kmeans(x, n_topics)
+        # -1 = too short/generic to carry topic signal
+        assign = np.full(len(texts), -1, dtype=np.int32)
+        assign[content_idx] = assign_content
         cluster_msg_count: Counter = Counter()
         cluster_person: dict[int, Counter] = defaultdict(Counter)
         for t, _mine, pid, _m, _y, _dm in msgs:
             cid = int(assign[text_idx[t]])
+            if cid < 0:
+                continue
             cluster_msg_count[cid] += 1
             if pid in person_names:
                 cluster_person[cid][pid] += 1
         total_msgs = sum(cluster_msg_count.values())
         print("labeling clusters…")
-        for cid in range(K_CLUSTERS):
-            members = [texts[i] for i in np.flatnonzero(assign == cid)]
+        for cid in range(n_topics):
+            members = [texts[i] for i in content_idx
+                       if assign[i] == cid]
             members.sort(key=lambda t: -total_by_text[t])
             label = label_cluster(members[:30], api_key)
-            share = cluster_msg_count[cid] / total_msgs
+            share = cluster_msg_count[cid] / max(total_msgs, 1)
             cluster_rows.append((cid, label, cluster_msg_count[cid], share))
             # Share of the WHOLE cluster, not just the named-contact slice —
             # otherwise clusters dominated by unnamed senders (bank alerts,
@@ -251,7 +321,7 @@ def main(people_only: bool = False) -> None:
                 if n / cluster_total >= 0.03:
                     cluster_people_rows.append(
                         (cid, person_names[pid], n / cluster_total))
-            print(f"  cluster {cid}: {label} ({share:.0%})")
+            print(f"  cluster {cid}: {label} ({share:.0%})", flush=True)
 
         # ---- voice metrics ----
         print("voice metrics…")
@@ -458,7 +528,7 @@ def main(people_only: bool = False) -> None:
     out.executemany("INSERT INTO person_map VALUES (?,?,?,?,?,?,?,?)",
                     person_map_rows)
     out.close()
-    print(f"done: {len(texts):,} embeddings, {K_CLUSTERS} topics, "
+    print(f"done: {len(texts):,} embeddings, {n_topics} topics, "
           f"{len(voice_rows)} voice rows, {len(sig_rows)} signature phrases, "
           f"{k_p} people clusters, {len(person_map_rows)} map points")
 
