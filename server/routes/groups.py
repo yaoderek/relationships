@@ -111,7 +111,8 @@ def group_member_stats(chat_id: int, person_id: int, request: Request):
     placeholders = ", ".join("?" for _ in _STOPWORDS)
     top_words = run(db, f"""
         SELECT w AS word, count(*) AS c FROM (
-            SELECT unnest(string_split_regex(lower(m.text), '[^a-z'']+')) AS w
+            SELECT unnest(string_split_regex(
+                replace(lower(m.text), '’', ''''), '[^a-z'']+')) AS w
             FROM messages m
             WHERE m.chat_id = ? AND {cond} AND m.text IS NOT NULL)
         WHERE len(w) >= 3 AND w NOT IN ({placeholders})

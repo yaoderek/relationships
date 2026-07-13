@@ -15,7 +15,7 @@ def you_word_context(word: str, request: Request):
         SELECT trim(text) AS s, count(*) AS c
         FROM messages
         WHERE is_from_me AND text IS NOT NULL
-              AND regexp_matches(lower(text), ?)
+              AND regexp_matches(replace(lower(text), '’', ''''), ?)
         GROUP BY 1 ORDER BY c DESC, s LIMIT 5""", [pattern])
     return [{"text": r[0], "count": r[1]} for r in rows]
 
@@ -26,7 +26,8 @@ def you_vernacular_timeline(request: Request):
     rows = run(request.app.state.db_path, f"""
         WITH words AS (
             SELECT strftime(date_trunc('year', ts_local), '%Y') AS y,
-                   unnest(string_split_regex(lower(text), '[^a-z'']+')) AS w
+                   unnest(string_split_regex(
+                       replace(lower(text), '’', ''''), '[^a-z'']+')) AS w
             FROM messages WHERE is_from_me AND text IS NOT NULL
         ),
         counts AS (
@@ -112,7 +113,8 @@ def you_stats(request: Request):
     placeholders = ", ".join("?" for _ in STOPWORDS)
     top_words = run(db, f"""
         SELECT w AS word, count(*) AS c FROM (
-            SELECT unnest(string_split_regex(lower(text), '[^a-z'']+')) AS w
+            SELECT unnest(string_split_regex(
+                replace(lower(text), '’', ''''), '[^a-z'']+')) AS w
             FROM messages WHERE is_from_me AND text IS NOT NULL)
         WHERE len(w) >= 3 AND w NOT IN ({placeholders})
         GROUP BY 1 ORDER BY c DESC, w LIMIT 15""", [*STOPWORDS])

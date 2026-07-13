@@ -12,8 +12,9 @@ _CACHE_PATH = Path("data/llm_cache.json")
 _SYSTEM_PROMPT = (
     "You summarize one day of a text-message conversation between the reader "
     "(their messages are labeled 'You') and one other person. Address the "
-    "reader in the second person — write 'You and Alex...', never 'Me' or "
-    "'the user'. Reply with JSON: "
+    "reader in the second person as 'you', and refer to the other person by "
+    "the exact name used in the transcript labels — never 'Me' or 'the user', "
+    "and never invent or substitute a different name. Reply with JSON: "
     '{"summary": "2-4 sentences: what was happening that day, the main topics, '
     'and the mood", "sentiment": "one or two words, e.g. warm, playful, tense, '
     'flirty, logistical"}. Be specific but concise; never invent details.'

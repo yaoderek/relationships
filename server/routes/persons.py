@@ -250,7 +250,8 @@ def person_stats(person_id: int, request: Request):
         placeholders = ", ".join("?" for _ in STOPWORDS)
         return [{"word": r[0], "count": r[1]} for r in run(db, f"""
             SELECT w AS word, count(*) AS c FROM (
-                SELECT unnest(string_split_regex(lower(m.text), '[^a-z'']+')) AS w
+                SELECT unnest(string_split_regex(
+                    replace(lower(m.text), '’', ''''), '[^a-z'']+')) AS w
                 {_JOIN_1TO1}
                 WHERE m.is_from_me = ? AND m.text IS NOT NULL)
             WHERE len(w) >= 3 AND w NOT IN ({placeholders})
