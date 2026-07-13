@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 
 from ..db import bucket_expr, run
+from ..stopwords import STOPWORDS as _STOPWORDS
 
 router = APIRouter()
 
@@ -61,15 +62,6 @@ def group_heatmap(chat_id: int, request: Request):
     """
     return [{"weekday": r[0], "hour": r[1], "count": r[2]}
             for r in run(db, sql, [chat_id])]
-
-
-_STOPWORDS = (
-    "the", "and", "you", "that", "this", "for", "but", "not", "with", "was",
-    "are", "have", "had", "just", "what", "your", "its", "it's", "can", "will",
-    "get", "got", "all", "out", "too", "then", "than", "they", "them", "there",
-    "when", "how", "who", "why", "yes", "yeah", "okay", "one", "him", "her",
-    "his", "she", "he's", "i'm", "i'll", "don't", "didn't", "were",
-)
 
 
 def _member_filter(person_id: int) -> tuple[str, list]:

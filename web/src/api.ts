@@ -25,9 +25,12 @@ export type PersonStats = {
   double_texts_me: number; double_texts_them: number;
   ghosts_by_them: number; ghosts_by_me: number;
   avg_session_messages: number | null; avg_session_seconds: number | null;
+  top_words_me: WordCount[]; top_words_them: WordCount[];
   top_emojis_me: EmojiCount[]; top_emojis_them: EmojiCount[];
   tapbacks_from_them: TapbackCount[]; tapbacks_from_me: TapbackCount[];
 };
+export type HotDay = { date: string; count: number; sent: number; received: number };
+export type DaySummary = { date: string; summary: string; sentiment: string | null };
 export type CompareSeries = {
   person_id: number; display_name: string;
   series: { bucket: string; total: number }[];
@@ -72,6 +75,10 @@ export const fetchPersonStats = (id: number) =>
   get<PersonStats>(`/api/persons/${id}/stats`);
 export const fetchPersonHeatmap = (id: number) =>
   get<HeatCell[]>(`/api/persons/${id}/heatmap`);
+export const fetchHotDays = (id: number) =>
+  get<HotDay[]>(`/api/persons/${id}/hot-days`);
+export const fetchDaySummary = (id: number, date: string) =>
+  get<DaySummary>(`/api/persons/${id}/day-summary?date=${date}`);
 export const fetchCompare = (ids: number[], bucket: Bucket) =>
   get<CompareSeries[]>(`/api/compare?ids=${ids.join(",")}&bucket=${bucket}`);
 export const fetchGroups = () => get<GroupSummary[]>("/api/groups");

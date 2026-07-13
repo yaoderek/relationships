@@ -4,9 +4,11 @@ from pathlib import Path
 import uvicorn
 
 from .app import create_app
+from .llm import load_env_file
 
 
 def main() -> None:
+    load_env_file()
     p = argparse.ArgumentParser(prog="python -m server")
     p.add_argument("--db", type=Path, default=Path("data/analytics.duckdb"))
     p.add_argument("--port", type=int, default=8000)

@@ -402,6 +402,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "emoji" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "pyyaml" },
     { name = "uvicorn" },
 ]
@@ -417,6 +418,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.0" },
     { name = "emoji", specifier = ">=2.12" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]

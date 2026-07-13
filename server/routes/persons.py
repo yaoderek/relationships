@@ -1,8 +1,14 @@
+import re
+
 from fastapi import APIRouter, HTTPException, Request
 
 from ..db import bucket_expr, run
+from ..llm import summarize_day
+from ..stopwords import STOPWORDS
 
 router = APIRouter()
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 _LIST_SQL = """
     WITH msgs AS (
@@ -194,6 +200,17 @@ def person_stats(person_id: int, request: Request):
     block_me, block_them, doubles_me, doubles_them = blocks
     block_ratio = (block_them / block_me) if block_me and block_them else None
 
+    def words(from_me: bool):
+        placeholders = ", ".join("?" for _ in STOPWORDS)
+        return [{"word": r[0], "count": r[1]} for r in run(db, f"""
+            SELECT w AS word, count(*) AS c FROM (
+                SELECT unnest(string_split_regex(lower(m.text), '[^a-z'']+')) AS w
+                {_JOIN_1TO1}
+                WHERE m.is_from_me = ? AND m.text IS NOT NULL)
+            WHERE len(w) >= 3 AND w NOT IN ({placeholders})
+            GROUP BY 1 ORDER BY c DESC, w LIMIT 10""",
+            [person_id, from_me, *STOPWORDS])]
+
     def emojis(from_me: bool):
         return [{"emoji": r[0], "count": r[1]} for r in run(db, """
             SELECT e.emoji, count(*) AS c FROM emoji_uses e
@@ -224,9 +241,47 @@ def person_stats(person_id: int, request: Request):
         "double_texts_me": doubles_me, "double_texts_them": doubles_them,
         "ghosts_by_them": sessions[2], "ghosts_by_me": sessions[3],
         "avg_session_messages": sessions[0], "avg_session_seconds": sessions[1],
+        "top_words_me": words(True), "top_words_them": words(False),
         "top_emojis_me": emojis(True), "top_emojis_them": emojis(False),
         "tapbacks_from_them": tap_from_them, "tapbacks_from_me": tap_from_me,
     }
+
+
+@router.get("/persons/{person_id}/hot-days")
+def person_hot_days(person_id: int, request: Request, limit: int = 8):
+    db = request.app.state.db_path
+    rows = run(db, f"""
+        SELECT strftime(date_trunc('day', m.ts_local), '%Y-%m-%d') AS d,
+               count(*) AS c,
+               count(*) FILTER (WHERE m.is_from_me) AS sent,
+               count(*) FILTER (WHERE NOT m.is_from_me) AS received
+        {_JOIN_1TO1}
+        GROUP BY 1 ORDER BY c DESC, d LIMIT ?""", [person_id, limit])
+    return [{"date": r[0], "count": r[1], "sent": r[2], "received": r[3]}
+            for r in rows]
+
+
+@router.get("/persons/{person_id}/day-summary")
+def person_day_summary(person_id: int, date: str, request: Request):
+    if not _DATE_RE.match(date):
+        raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD")
+    db = request.app.state.db_path
+    name = run(db, "SELECT display_name FROM persons WHERE person_id = ?", [person_id])
+    if not name:
+        raise HTTPException(status_code=404, detail="unknown person")
+    rows = run(db, f"""
+        SELECT strftime(m.ts_local, '%H:%M') AS hm, m.is_from_me, m.text
+        {_JOIN_1TO1}
+        WHERE strftime(date_trunc('day', m.ts_local), '%Y-%m-%d') = ?
+              AND m.text IS NOT NULL
+        ORDER BY m.ts_local LIMIT 400""", [person_id, date])
+    if not rows:
+        raise HTTPException(status_code=404, detail="no messages on that day")
+    lines = [f"{hm} {'Me' if from_me else name[0][0]}: {text[:200]}"
+             for hm, from_me, text in rows]
+    transcript = "\n".join(lines)[:12000]
+    result = summarize_day(f"{person_id}:{date}", name[0][0], date, transcript)
+    return {"date": date, **result}
 
 
 @router.get("/persons/{person_id}/heatmap")

@@ -75,6 +75,35 @@ def test_person_conversation_stats(client):
     assert s["avg_session_messages"] == 2.0
 
 
+def test_person_top_words(client):
+    pid = _alice_id(client)
+    s = client.get(f"/api/persons/{pid}/stats").json()
+    assert s["top_words_them"] == [{"word": "hey", "count": 1}]   # "hi" too short
+    assert s["top_words_me"] == [{"word": "morning", "count": 1}]  # "yo" too short
+
+
+def test_person_hot_days(client):
+    pid = _alice_id(client)
+    days = client.get(f"/api/persons/{pid}/hot-days").json()
+    assert days == [
+        {"date": "2024-06-01", "count": 2, "sent": 1, "received": 1},
+        {"date": "2024-06-02", "count": 2, "sent": 1, "received": 1},
+    ]
+
+
+def test_day_summary_requires_key(client, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    pid = _alice_id(client)
+    r = client.get(f"/api/persons/{pid}/day-summary?date=2024-06-01")
+    assert r.status_code == 503
+
+
+def test_day_summary_rejects_bad_date(client):
+    pid = _alice_id(client)
+    r = client.get(f"/api/persons/{pid}/day-summary?date=junk")
+    assert r.status_code == 422
+
+
 def test_person_stats_404(client):
     assert client.get("/api/persons/9999/stats").status_code == 404
 
