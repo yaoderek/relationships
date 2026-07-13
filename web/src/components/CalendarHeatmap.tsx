@@ -39,6 +39,7 @@ function cellColor(count: number, max: number): string {
 export default function CalendarHeatmap() {
   const days = useFetch(fetchYouCalendar, []);
   const [year, setYear] = useState<number | null>(null);
+  const [picked, setPicked] = useState<Cell | null>(null);
 
   const { counts, years } = useMemo(() => {
     const counts = new Map((days ?? []).map((d) => [d.date, d.count]));
@@ -83,15 +84,36 @@ export default function CalendarHeatmap() {
                 <div key={di}
                      title={c.date
                        ? `${c.date} — ${c.count.toLocaleString()} texts` : ""}
+                     onClick={() => c.date
+                       && setPicked(picked?.date === c.date ? null : c)}
                      style={{ width: CELL, height: CELL, borderRadius: 2.5,
+                              cursor: c.date ? "pointer" : "default",
+                              outline: picked?.date === c.date
+                                ? "2px solid #5B8FF9" : "none",
+                              outlineOffset: 1,
                               background: c.date
                                 ? cellColor(c.count, max) : "transparent" }} />
               ))}
             </div>
           ))}
         </div>
+        <div style={{ minHeight: 22, marginTop: 8, fontSize: 13 }}>
+          {picked?.date && (
+            <span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                {new Date(picked.date + "T00:00:00").toLocaleDateString(
+                  undefined,
+                  { weekday: "short", year: "numeric", month: "long",
+                    day: "numeric" })}
+              </span>
+              {" — "}
+              <strong>{picked.count.toLocaleString()}</strong>
+              {picked.count === 1 ? " text sent" : " texts sent"}
+            </span>
+          )}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4,
-                      marginTop: 8, fontSize: 10, opacity: 0.6,
+                      marginTop: 2, fontSize: 10, opacity: 0.6,
                       justifyContent: "flex-end" }}>
           Less
           {[0, 0.15, 0.4, 0.7, 1].map((t) => (
@@ -106,7 +128,7 @@ export default function CalendarHeatmap() {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {years.map((y) => (
-          <button key={y} onClick={() => setYear(y)}
+          <button key={y} onClick={() => { setYear(y); setPicked(null); }}
                   style={{ padding: "5px 14px", fontSize: 13, font: "inherit",
                            textAlign: "center", borderRadius: 8,
                            color: "inherit",
