@@ -148,7 +148,7 @@ def weighted_centroid(emb: np.ndarray, idx: list[int], weights: list[int]):
     return c / n if n > 1e-9 else None
 
 
-def main() -> None:
+def main(people_only: bool = False) -> None:
     load_env_file()
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -218,74 +218,78 @@ def main() -> None:
         else:
             emb[i] = new_emb[new_idx[t]]
 
+    if people_only and not OUT.exists():
+        raise SystemExit("--people-only needs an existing data/language.duckdb")
+
     # ---- topic clusters ----
-    print("clustering…")
-    assign, _ = kmeans(emb, K_CLUSTERS)
-    cluster_msg_count: Counter = Counter()
-    cluster_person: dict[int, Counter] = defaultdict(Counter)
-    for t, _mine, pid, _m, _y, _dm in msgs:
-        cid = int(assign[text_idx[t]])
-        cluster_msg_count[cid] += 1
-        if pid in person_names:
-            cluster_person[cid][pid] += 1
-    total_msgs = sum(cluster_msg_count.values())
-    print("labeling clusters…")
     cluster_rows, cluster_people_rows = [], []
-    for cid in range(K_CLUSTERS):
-        members = [texts[i] for i in np.flatnonzero(assign == cid)]
-        members.sort(key=lambda t: -total_by_text[t])
-        label = label_cluster(members[:30], api_key)
-        share = cluster_msg_count[cid] / total_msgs
-        cluster_rows.append((cid, label, cluster_msg_count[cid], share))
-        cluster_total = sum(cluster_person[cid].values()) or 1
-        for pid, n in cluster_person[cid].most_common(3):
-            cluster_people_rows.append(
-                (cid, person_names[pid], n / cluster_total))
-        print(f"  cluster {cid}: {label} ({share:.0%})")
+    voice_rows, drift_rows, sig_rows = [], [], []
+    assign = None
+    if not people_only:
+        print("clustering…")
+        assign, _ = kmeans(emb, K_CLUSTERS)
+        cluster_msg_count: Counter = Counter()
+        cluster_person: dict[int, Counter] = defaultdict(Counter)
+        for t, _mine, pid, _m, _y, _dm in msgs:
+            cid = int(assign[text_idx[t]])
+            cluster_msg_count[cid] += 1
+            if pid in person_names:
+                cluster_person[cid][pid] += 1
+        total_msgs = sum(cluster_msg_count.values())
+        print("labeling clusters…")
+        for cid in range(K_CLUSTERS):
+            members = [texts[i] for i in np.flatnonzero(assign == cid)]
+            members.sort(key=lambda t: -total_by_text[t])
+            label = label_cluster(members[:30], api_key)
+            share = cluster_msg_count[cid] / total_msgs
+            cluster_rows.append((cid, label, cluster_msg_count[cid], share))
+            cluster_total = sum(cluster_person[cid].values()) or 1
+            for pid, n in cluster_person[cid].most_common(3):
+                cluster_people_rows.append(
+                    (cid, person_names[pid], n / cluster_total))
+            print(f"  cluster {cid}: {label} ({share:.0%})")
 
-    # ---- voice metrics ----
-    print("voice metrics…")
-    by_scope_texts: dict[tuple, Counter] = defaultdict(Counter)
-    for t, mine, pid, month, _y, is_dm in msgs:
-        if mine:
-            by_scope_texts[("month", month)][t] += 1
-            by_scope_texts[("me",)][t] += 1
-            if is_dm and pid in person_names:
-                by_scope_texts[("me_with", pid)][t] += 1
-        elif is_dm and pid in person_names:
-            by_scope_texts[("them", pid)][t] += 1
+        # ---- voice metrics ----
+        print("voice metrics…")
+        by_scope_texts: dict[tuple, Counter] = defaultdict(Counter)
+        for t, mine, pid, month, _y, is_dm in msgs:
+            if mine:
+                by_scope_texts[("month", month)][t] += 1
+                by_scope_texts[("me",)][t] += 1
+                if is_dm and pid in person_names:
+                    by_scope_texts[("me_with", pid)][t] += 1
+            elif is_dm and pid in person_names:
+                by_scope_texts[("them", pid)][t] += 1
 
-    def centroid(key) -> np.ndarray | None:
-        c = by_scope_texts.get(key)
-        if not c:
-            return None
-        idx = [text_idx[t] for t in c]
-        return weighted_centroid(emb, idx, list(c.values()))
+        def centroid(key) -> np.ndarray | None:
+            c = by_scope_texts.get(key)
+            if not c:
+                return None
+            idx = [text_idx[t] for t in c]
+            return weighted_centroid(emb, idx, list(c.values()))
 
-    me_global = centroid(("me",))
-    voice_rows = []
-    for pid in top_voice:
-        me_p = centroid(("me_with", pid))
-        them_p = centroid(("them", pid))
-        if me_p is None or them_p is None or me_global is None:
-            continue
-        n = sum(by_scope_texts[("me_with", pid)].values())
-        voice_rows.append((pid, person_names[pid], n,
-                           1 - cos(me_p, me_global), cos(me_p, them_p)))
+        me_global = centroid(("me",))
+        for pid in top_voice:
+            me_p = centroid(("me_with", pid))
+            them_p = centroid(("them", pid))
+            if me_p is None or them_p is None or me_global is None:
+                continue
+            n = sum(by_scope_texts[("me_with", pid)].values())
+            voice_rows.append((pid, person_names[pid], n,
+                               1 - cos(me_p, me_global), cos(me_p, them_p)))
 
-    months = sorted({k[1] for k in by_scope_texts if k[0] == "month"})
-    drift_rows = []
-    prev = None
-    for m in months:
-        if sum(by_scope_texts[("month", m)].values()) < 50:
-            continue
-        c = centroid(("month", m))
-        if c is None:
-            continue
-        drift = 1 - cos(c, prev) if prev is not None else None
-        novelty = 1 - cos(c, me_global) if me_global is not None else None
-        drift_rows.append((m, drift, novelty))
-        prev = c
+        months = sorted({k[1] for k in by_scope_texts if k[0] == "month"})
+        prev = None
+        for m in months:
+            if sum(by_scope_texts[("month", m)].values()) < 50:
+                continue
+            c = centroid(("month", m))
+            if c is None:
+                continue
+            drift = 1 - cos(c, prev) if prev is not None else None
+            novelty = 1 - cos(c, me_global) if me_global is not None else None
+            drift_rows.append((m, drift, novelty))
+            prev = c
 
     # ---- people clusters + temporal 3D map ----
     print("people clusters…")
@@ -305,7 +309,17 @@ def main() -> None:
             vec_all[pid] = v
     pids = list(vec_all)
     people_x = np.stack([vec_all[p] for p in pids])
-    assign_p, cent_p, k_p = pick_kmeans(people_x, range(3, 9))
+
+    # Everyone's centroid shares one dominant "casual texting" direction, which
+    # crushes silhouette scores toward tiny k. Removing the mean amplifies what
+    # actually distinguishes people from each other.
+    mean_vec = people_x.mean(0)
+
+    def center(x: np.ndarray) -> np.ndarray:
+        c = x - mean_vec
+        return c / (np.linalg.norm(c, axis=-1, keepdims=True) + 1e-9)
+
+    assign_p, cent_p, k_p = pick_kmeans(center(people_x), range(4, 10))
     print(f"  {len(pids)} people → {k_p} clusters (best silhouette)")
 
     person_cluster_rows = []
@@ -337,52 +351,69 @@ def main() -> None:
         period_msgs[(pid, year)] = sum(c.values())
 
     print(f"  UMAP on {len(period_vecs)} person-period vectors…")
+    centered_periods = center(np.stack(period_vecs))
     reducer = umap.UMAP(n_components=3, metric="cosine",
                         n_neighbors=min(10, len(period_vecs) - 1),
                         min_dist=0.3, random_state=42)
-    coords = reducer.fit_transform(np.stack(period_vecs))
+    coords = reducer.fit_transform(centered_periods)
     coords = (coords - coords.mean(0)) / (coords.std(0) + 1e-9)
 
     person_map_rows = []
-    for (pid, period), vec, (x, y, z) in zip(period_keys, period_vecs, coords):
-        cid = int((vec @ cent_p.T).argmax())
+    for (pid, period), cvec, (x, y, z) in zip(period_keys, centered_periods,
+                                              coords):
+        cid = int((cvec @ cent_p.T).argmax())
         person_map_rows.append((pid, person_names[pid], period,
                                 float(x), float(y), float(z), cid,
                                 period_msgs[(pid, period)]))
 
     # ---- signature phrases (no embeddings needed) ----
-    print("signature phrases…")
-    global_all: Counter = Counter()
-    global_mine: Counter = Counter()
-    year_mine: dict[str, Counter] = defaultdict(Counter)
-    pair_all: dict[int, Counter] = defaultdict(Counter)
-    pair_volume: Counter = Counter()
-    for t, mine, pid, _m, year, is_dm in msgs:
-        grams = ngram_counts([t])
-        global_all.update(grams)
-        if mine:
-            global_mine.update(grams)
-            year_mine[year].update(grams)
-        if is_dm and pid in person_names:
-            pair_all[pid].update(grams)
-            pair_volume[pid] += 1
+    if not people_only:
+        print("signature phrases…")
+        global_all: Counter = Counter()
+        global_mine: Counter = Counter()
+        year_mine: dict[str, Counter] = defaultdict(Counter)
+        pair_all: dict[int, Counter] = defaultdict(Counter)
+        pair_volume: Counter = Counter()
+        for t, mine, pid, _m, year, is_dm in msgs:
+            grams = ngram_counts([t])
+            global_all.update(grams)
+            if mine:
+                global_mine.update(grams)
+                year_mine[year].update(grams)
+            if is_dm and pid in person_names:
+                pair_all[pid].update(grams)
+                pair_volume[pid] += 1
 
-    sig_rows = []
-    others = global_all - global_mine
-    for phrase, count, z in log_odds(global_mine, others, min_count=8, limit=25):
-        sig_rows.append(("you", "You", phrase, count, z))
-    for year, target in sorted(year_mine.items()):
-        rest = global_mine - target
-        for phrase, count, z in log_odds(target, rest, min_count=5, limit=15):
-            sig_rows.append((f"year:{year}", year, phrase, count, z))
-    for pid, _n in pair_volume.most_common(TOP_PERSONS_PHRASES):
-        target = pair_all[pid]
-        rest = global_all - target
-        for phrase, count, z in log_odds(target, rest, min_count=4, limit=15):
-            sig_rows.append((f"person:{pid}", person_names[pid],
-                             phrase, count, z))
+        others = global_all - global_mine
+        for phrase, count, z in log_odds(global_mine, others,
+                                         min_count=8, limit=25):
+            sig_rows.append(("you", "You", phrase, count, z))
+        for year, target in sorted(year_mine.items()):
+            rest = global_mine - target
+            for phrase, count, z in log_odds(target, rest,
+                                             min_count=5, limit=15):
+                sig_rows.append((f"year:{year}", year, phrase, count, z))
+        for pid, _n in pair_volume.most_common(TOP_PERSONS_PHRASES):
+            target = pair_all[pid]
+            rest = global_all - target
+            for phrase, count, z in log_odds(target, rest,
+                                             min_count=4, limit=15):
+                sig_rows.append((f"person:{pid}", person_names[pid],
+                                 phrase, count, z))
 
     # ---- write ----
+    if people_only:
+        print("updating person tables in data/language.duckdb…")
+        out = duckdb.connect(str(OUT))
+        out.execute("DELETE FROM person_clusters; DELETE FROM person_map;")
+        out.executemany("INSERT INTO person_clusters VALUES (?,?,?,?)",
+                        person_cluster_rows)
+        out.executemany("INSERT INTO person_map VALUES (?,?,?,?,?,?,?,?)",
+                        person_map_rows)
+        out.close()
+        print(f"done: {k_p} people clusters, {len(person_map_rows)} map points")
+        return
+
     print("writing data/language.duckdb…")
     OUT.unlink(missing_ok=True)
     out = duckdb.connect(str(OUT))
@@ -429,4 +460,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--people-only", action="store_true",
+                        help="recompute only person clusters and the 3D map")
+    args = parser.parse_args()
+    main(people_only=args.people_only)

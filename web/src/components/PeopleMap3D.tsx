@@ -66,6 +66,8 @@ export default function PeopleMap3D() {
     }
   }, [period, byPeriod]);
 
+  // Depends on `data`: the canvas only mounts once data arrives, so an
+  // empty-dep effect would fire before the ref exists and never start.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -112,7 +114,7 @@ export default function PeopleMap3D() {
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [data]);
 
   const pointer = (e: React.PointerEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();
