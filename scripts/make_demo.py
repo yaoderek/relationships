@@ -1,4 +1,5 @@
 """Synthetic demo analytics.duckdb — develop the dashboard without Full Disk Access."""
+import argparse
 import math
 import random
 import sys
@@ -19,6 +20,10 @@ PHRASES = ["hey", "lol 😂", "sounds good", "omw", "nice 🎉", "ok ok",
 
 
 def main() -> None:
+    p = argparse.ArgumentParser(prog="python scripts/make_demo.py")
+    p.add_argument("--out", type=Path, default=Path("data/analytics.duckdb"))
+    args = p.parse_args()
+
     rng = random.Random(42)
     data_dir = Path("data")
     data_dir.mkdir(exist_ok=True)
@@ -51,8 +56,9 @@ def main() -> None:
 
     make_chat_db(chat_path, handles, chats, chat_handles, messages)
     contacts = {normalize_handle(num): name for _, num, name in PEOPLE}
-    build_analytics_db(data_dir / "analytics.duckdb", read_raw(chat_path), contacts)
-    print(f"Wrote data/analytics.duckdb with {msg_id - 1} messages")
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    build_analytics_db(args.out, read_raw(chat_path), contacts)
+    print(f"Wrote {args.out} with {msg_id - 1} messages")
 
 
 if __name__ == "__main__":
