@@ -62,6 +62,13 @@ step "3/5 Installing dependencies and building the dashboard"
 uv sync
 (cd web && npm install --no-fund --no-audit && npm run build)
 
+# Optional AI features read OPENAI_API_KEY from .env; seed a placeholder so
+# the file and instructions are there, but never touch an existing .env.
+if [[ ! -f .env ]]; then
+  cp .env.example .env
+  note "Created .env — optional: add an OpenAI key there for AI features"
+fi
+
 DB_PATH="data/analytics.duckdb"
 if [[ "$DEMO" == "1" ]]; then
   step "4/5 Generating demo data (no Messages access needed)"

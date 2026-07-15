@@ -203,8 +203,9 @@ def weighted_centroid(emb: np.ndarray, idx: list[int], weights: list[int]):
 def main(people_only: bool = False) -> None:
     load_env_file()
     api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise SystemExit("OPENAI_API_KEY missing — add it to .env")
+    if not api_key or api_key == "insert_openai_key_here":
+        raise SystemExit("OPENAI_API_KEY missing — copy .env.example to .env "
+                         "and add your key")
     if not ANALYTICS.exists():
         raise SystemExit("data/analytics.duckdb missing — run `python -m ingest`")
 

@@ -59,9 +59,11 @@ def _write_cache(cache: dict) -> None:
 
 def _complete_json(cache_key: str, system_prompt: str, user_content: str) -> str:
     api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=503,
-                            detail="OPENAI_API_KEY not configured — add it to .env")
+    if not api_key or api_key == "insert_openai_key_here":
+        raise HTTPException(
+            status_code=503,
+            detail="OPENAI_API_KEY not configured — copy .env.example to .env "
+                   "and add your key")
 
     payload = {
         "model": os.environ.get("OPENAI_MODEL", "gpt-5-nano"),

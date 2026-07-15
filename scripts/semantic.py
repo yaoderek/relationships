@@ -1198,8 +1198,9 @@ def giant_diffusion(adj: csr_matrix, t: int = 16
 def main(map_only: bool = False) -> None:
     load_env_file()
     api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise SystemExit("OPENAI_API_KEY missing — add it to .env")
+    if not api_key or api_key == "insert_openai_key_here":
+        raise SystemExit("OPENAI_API_KEY missing — copy .env.example to .env "
+                         "and add your key")
     if not ANALYTICS.exists() or not LANGUAGE.exists():
         raise SystemExit("run `python -m ingest` and scripts/language.py "
                          "first")

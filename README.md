@@ -46,6 +46,34 @@ First run takes a few minutes (mostly the ingest). When you're done, press
   `overrides.example.yaml` to `overrides.yaml`, edit it, and re-run
   `./setup.sh`.
 
+### Optional: AI features (bring your own OpenAI key)
+
+Everything above works with **no API key and no network access**. Two extra
+features call OpenAI's API if — and only if — you add your own key:
+
+- **Day summaries** — short AI recaps of your busiest days.
+- **Semantic analysis** — the topic map on the Language page (requires
+  embedding your messages first).
+
+To enable them, open the `.env` file (the setup script creates it) and
+replace the placeholder with your key from
+[platform.openai.com/api-keys](https://platform.openai.com/api-keys):
+
+```
+OPENAI_API_KEY=sk-your-actual-key
+```
+
+Then for the semantic features, run the embedding pipeline:
+
+```bash
+uv run python scripts/language.py    # embeds messages (uses your OpenAI credits)
+uv run python scripts/semantic.py    # builds the topic map
+```
+
+Be aware: these features send message text to OpenAI under *your* account.
+Without a key, they simply show as unavailable — nothing else is affected.
+Never commit your `.env` (it's gitignored).
+
 <details>
 <summary>What the script runs under the hood (manual setup)</summary>
 
