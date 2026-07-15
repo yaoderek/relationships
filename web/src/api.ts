@@ -142,6 +142,39 @@ export type MapPoint = {
 };
 export type PeopleMap = { periods: string[]; points: MapPoint[] };
 export const fetchPeopleMap = () => get<PeopleMap>("/api/language/people-map");
+export type SemanticCommunity = {
+  gamma: number; cluster_id: number; label: string; size: number;
+  phrases: string[]; top_contacts: [string, number][];
+  years: Record<string, number>;
+  from_me_frac: number; initiated_frac: number; median_msgs: number;
+  examples: string[];
+  parent_gamma: number | null; parent_cluster_id: number | null;
+};
+export type SemanticMapPoint = {
+  x: number; y: number; x3: number; y3: number; z3: number;
+  c: [number, number, number, number];
+  contact: string; date: string; n_msgs: number; snippet: string;
+};
+export type SemanticMap = {
+  communities: SemanticCommunity[];
+  points: SemanticMapPoint[];
+  umap_neighbors: number[];
+  umap_min_dist: number[];
+  umap_default_neighbors: number;
+  umap_default_min_dist: number;
+};
+export type SemanticMapLayout = { layout: [number, number, number][] };
+export type SemanticMapLayouts = {
+  variants: Record<string, [number, number, number][]>;
+};
+export const fetchSemanticMap = () =>
+  get<SemanticMap>("/api/language/semantic-map");
+export const fetchSemanticMapLayouts = () =>
+  get<SemanticMapLayouts>("/api/language/semantic-map/all-layouts");
+export const fetchSemanticMapLayout = (n_neighbors: number, min_dist: number) =>
+  get<SemanticMapLayout>(
+    `/api/language/semantic-map/layout?n_neighbors=${n_neighbors}`
+    + `&min_dist=${min_dist}`);
 export type SearchHit = {
   text: string; total: number; mine: number; similarity: number;
 };

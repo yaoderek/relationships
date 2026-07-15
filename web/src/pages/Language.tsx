@@ -1,21 +1,21 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Area, AreaChart, CartesianGrid, Cell, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
-import { fetchDrift, fetchLanguageSearch, fetchPeopleClusters, fetchSignature, fetchSignatureScopes, fetchTopics, fetchVoice } from "../api";
-import type { SearchHit, VoicePoint } from "../api";
+import { CartesianGrid, Cell, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
+import { fetchCatchphrasesTimeline, fetchLanguageSearch, fetchSignature, fetchSignatureScopes, fetchVoice, fetchWordContext, fetchYou } from "../api";
+import type { SearchHit, SentenceCount, VoicePoint } from "../api";
 import Dropdown from "../components/Dropdown";
 import Leaderboard from "../components/Leaderboard";
-import PeopleMap3D, { CLUSTER_PALETTE } from "../components/PeopleMap3D";
+import SessionMap from "../components/SessionMap";
 import Spine from "../components/Spine";
-import { fmtPercent } from "../lib/format";
 import { useFetch } from "../lib/useFetch";
 
 const SECTIONS = [
+  { id: "lang-topicmap", label: "Topic map" },
+  { id: "lang-vernacular", label: "Vernacular" },
   { id: "lang-signature", label: "Signature phrases" },
-  { id: "lang-topics", label: "Topics" },
-  { id: "lang-friends", label: "Friend clusters" },
+  { id: "lang-evolution", label: "Catchphrases by year" },
+  { id: "lang-catchphrases", label: "All-time catchphrases" },
   { id: "lang-voice", label: "Voice map" },
-  { id: "lang-drift", label: "Style drift" },
   { id: "lang-search", label: "Semantic search" },
 ];
 
@@ -31,10 +31,9 @@ const VOICE_VIEWS = [
 
 export default function Language() {
   const navigate = useNavigate();
-  const topics = useFetch(fetchTopics, []);
-  const peopleClusters = useFetch(fetchPeopleClusters, []);
+  const stats = useFetch(fetchYou, []);
+  const evolution = useFetch(fetchCatchphrasesTimeline, []);
   const voice = useFetch(fetchVoice, []);
-  const drift = useFetch(fetchDrift, []);
   const scopes = useFetch(fetchSignatureScopes, []);
   const [scope, setScope] = useState("you");
   const signature = useFetch(() => fetchSignature(scope), [scope]);
@@ -43,11 +42,20 @@ export default function Language() {
   const [searching, setSearching] = useState(false);
   const [voiceView, setVoiceView] = useState("map");
   const [voiceQuery, setVoiceQuery] = useState("");
+  const [word, setWord] = useState<string | null>(null);
+  const [sentences, setSentences] = useState<SentenceCount[] | null>(null);
 
   const voiceMatch = voiceQuery.trim()
     ? (voice ?? []).find((v) =>
         v.name.toLowerCase().includes(voiceQuery.trim().toLowerCase())) ?? null
     : null;
+
+  const pickWord = (w: string) => {
+    if (word === w) { setWord(null); setSentences(null); return; }
+    setWord(w);
+    setSentences(null);
+    fetchWordContext(w).then(setSentences).catch(() => setSentences([]));
+  };
 
   const search = () => {
     if (!query.trim() || searching) return;
@@ -73,14 +81,67 @@ export default function Language() {
   return (
     <>
       <Spine sections={SECTIONS} />
-      <h1 id="lang-signature">Language</h1>
+      <h1 id="lang-topicmap">Language</h1>
       <p style={{ fontSize: 13, opacity: 0.7, marginTop: -8 }}>
         What your words say about you — powered by embeddings of every message.
         If everything below is empty, run{" "}
         <code>uv run python scripts/language.py</code> and reload.
       </p>
 
-      <h2>Signature phrases</h2>
+      <h2>Topic map</h2>
+      <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
+        Every substantial conversation, embedded as a whole transcript and
+        grouped into topic communities. Slide resolution to split broad
+        domains into niches, scrub years to watch topics come and go.
+      </p>
+      <SessionMap />
+
+      <h2 id="lang-vernacular">Your vernacular</h2>
+      <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
+        Click a word to see how you actually use it.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {(stats?.top_words ?? []).map((w) => (
+          <button key={w.word} onClick={() => pickWord(w.word)}
+                  style={{ fontSize: 13, padding: "3px 10px", borderRadius: 999,
+                           font: "inherit", color: "inherit",
+                           background: word === w.word
+                             ? "rgba(91,143,249,0.22)" : "transparent",
+                           border: word === w.word
+                             ? "1px solid rgba(91,143,249,0.7)"
+                             : "1px solid rgba(128,128,128,0.3)",
+                           transition: "background .18s ease, border-color .18s ease" }}>
+            {w.word} <span style={{ opacity: 0.55 }}>×{w.count}</span>
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "grid",
+                    gridTemplateRows: word ? "1fr" : "0fr",
+                    transition: "grid-template-rows .3s ease" }}>
+        <div style={{ overflow: "hidden" }}>
+          <div style={{ margin: "12px 0 4px", padding: "10px 14px",
+                        border: "1px solid rgba(128,128,128,0.25)",
+                        borderRadius: 8, fontSize: 14 }}>
+            {word && !sentences && <span style={{ opacity: 0.6 }}>Looking…</span>}
+            {sentences?.length === 0 && (
+              <span style={{ opacity: 0.6 }}>No full sentences found.</span>
+            )}
+            {sentences?.map((s) => (
+              <div key={s.text}
+                   style={{ display: "flex", justifyContent: "space-between",
+                            gap: 12, padding: "5px 0" }}>
+                <span>“{s.text}”</span>
+                <span style={{ opacity: 0.55,
+                               fontVariantNumeric: "tabular-nums" }}>
+                  ×{s.count}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <h2 id="lang-signature">Signature phrases</h2>
       <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
         Phrases statistically over-represented in a scope versus everything
         else — not just frequent, but *distinctively* yours.
@@ -110,68 +171,49 @@ export default function Language() {
         </div>
       ))}
 
-      <h2 id="lang-topics">What you talk about</h2>
-      <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
-        Every message clustered by meaning, with the people who dominate each
-        topic.
-      </p>
-      <div style={{ display: "grid", gap: 10,
-                    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
-        {(topics ?? []).map((t, i) => (
-          <div key={t.cluster_id}
-               style={{ padding: "12px 14px", borderRadius: 10,
-                        border: "1px solid rgba(128,128,128,0.25)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between",
-                          gap: 8 }}>
-              <span style={{ fontWeight: 650 }}>{t.label}</span>
-              <span style={{ opacity: 0.6, fontSize: 13 }}>
-                {fmtPercent(t.share)}
-              </span>
-            </div>
-            <div style={{ background: PALETTE[i % PALETTE.length], height: 6,
-                          borderRadius: 3, margin: "8px 0",
-                          width: `${Math.max(4, t.share * 100 * 3)}%` }} />
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
-              {t.people.map((p) =>
-                `${p.name.split(" ")[0]} ${fmtPercent(p.share)}`).join(" · ")}
-            </div>
+      <h2 id="lang-evolution">Your catchphrases, year by year</h2>
+      <div style={{ display: "flex", gap: 10, overflowX: "auto",
+                    paddingBottom: 8 }}>
+        {(evolution ?? []).map((y) => (
+          <div key={y.bucket}
+               style={{ minWidth: 220, maxWidth: 260, padding: "10px 12px",
+                        border: "1px solid rgba(128,128,128,0.25)",
+                        borderRadius: 10 }}>
+            <div style={{ fontWeight: 650, marginBottom: 6 }}>{y.bucket}</div>
+            {y.sentences.map((s, i) => (
+              <div key={s.text}
+                   style={{ display: "flex", justifyContent: "space-between",
+                            gap: 8, fontSize: 13, padding: "3px 0",
+                            opacity: 1 - i * 0.1 }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                               whiteSpace: "nowrap" }}>“{s.text}”</span>
+                <span style={{ opacity: 0.55,
+                               fontVariantNumeric: "tabular-nums" }}>
+                  ×{s.count}
+                </span>
+              </div>
+            ))}
           </div>
         ))}
       </div>
 
-      <h2 id="lang-friends">Friend clusters</h2>
-      <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
-        Your top people clustered by what their messages sound like — k chosen
-        automatically for the cleanest split. Below, a UMAP projection of every
-        person into 3D space, per year.
-      </p>
-      <div style={{ display: "grid", gap: 10, marginBottom: 16,
-                    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
-        {(peopleClusters ?? []).map((c) => (
-          <div key={c.cluster_id}
-               style={{ padding: "12px 14px", borderRadius: 10,
-                        border: "1px solid rgba(128,128,128,0.25)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8,
-                          marginBottom: 8 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 999,
-                             background: CLUSTER_PALETTE[
-                               c.cluster_id % CLUSTER_PALETTE.length] }} />
-              <span style={{ fontWeight: 650 }}>{c.label}</span>
+      {(stats?.top_sentences.length ?? 0) > 0 && (
+        <>
+          <h2 id="lang-catchphrases">All-time catchphrases</h2>
+          {stats!.top_sentences.map((s) => (
+            <div key={s.text}
+                 style={{ display: "flex", justifyContent: "space-between",
+                          gap: 12, padding: "7px 10px", fontSize: 14,
+                          borderBottom: "1px solid rgba(128,128,128,0.15)" }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis",
+                             whiteSpace: "nowrap" }}>“{s.text}”</span>
+              <span style={{ opacity: 0.55, fontVariantNumeric: "tabular-nums" }}>
+                ×{s.count}
+              </span>
             </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {c.members.map((m) => (
-                <span key={m.person_id}
-                      style={{ fontSize: 12, padding: "2px 9px",
-                               borderRadius: 999,
-                               border: "1px solid rgba(128,128,128,0.3)" }}>
-                  {m.name.split(" ")[0]}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      <PeopleMap3D />
+          ))}
+        </>
+      )}
 
       <h2 id="lang-voice">Voice</h2>
       <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
@@ -273,29 +315,6 @@ export default function Language() {
         return <Leaderboard rows={rows} highlightKey={voiceMatch?.person_id}
                             onSelect={(id) => navigate(`/person/${id}`)} />;
       })()}
-
-      <h2 id="lang-drift">How your voice drifts</h2>
-      <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
-        Monthly distance between your texting style and the previous month
-        (drift) and your all-time average voice (novelty).
-      </p>
-      {drift && drift.length > 0 && (
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={drift} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeOpacity={0.15} vertical={false} />
-            <XAxis dataKey="month" tickLine={false} minTickGap={40} />
-            <YAxis tickLine={false} axisLine={false} width={52}
-                   tickFormatter={(v: number) => v.toFixed(2)} />
-            <Tooltip formatter={(v) => Number(v).toFixed(3)} />
-            <Area type="monotone" dataKey="novelty" name="Novelty vs all-time"
-                  stroke="#5B8FF9" fill="#5B8FF9" fillOpacity={0.2}
-                  strokeWidth={2} connectNulls />
-            <Area type="monotone" dataKey="drift" name="Month-to-month drift"
-                  stroke="#61DDAA" fill="#61DDAA" fillOpacity={0.2}
-                  strokeWidth={2} connectNulls />
-          </AreaChart>
-        </ResponsiveContainer>
-      )}
 
       <h2 id="lang-search">Semantic search</h2>
       <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
