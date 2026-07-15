@@ -31,25 +31,41 @@ function useRound<T>(fetcher: () => Promise<T | null>) {
   return { round, next: () => setNonce((n) => n + 1) };
 }
 
-function Bubble({ m, gap }: { m: GameMessage; gap: number }) {
+function Bubble({ m, gap, name }: {
+  m: GameMessage; gap: number; name?: string;
+}) {
   return (
-    <div style={{ display: "flex", marginBottom: gap,
-                  justifyContent: m.is_from_me ? "flex-end" : "flex-start" }}>
-      <div className={`bubble ${m.is_from_me ? "bubble-me" : "bubble-them"}`}>
-        {m.text}
+    <div style={{ marginBottom: gap }}>
+      {name && (
+        <div style={{ fontSize: 11, opacity: 0.55, margin: "0 0 2px 12px" }}>
+          {name}
+        </div>
+      )}
+      <div style={{ display: "flex",
+                    justifyContent: m.is_from_me ? "flex-end" : "flex-start" }}>
+        <div className={`bubble ${m.is_from_me ? "bubble-me" : "bubble-them"}`}>
+          {m.text}
+        </div>
       </div>
     </div>
   );
 }
 
 // iMessage-style rhythm: same sender stays tight, sender change gets air.
-function Bubbles({ messages }: { messages: GameMessage[] }) {
+// When senderName is given, it is shown above the first bubble of each of
+// the other person's runs, iOS style.
+function Bubbles({ messages, senderName }: {
+  messages: GameMessage[]; senderName?: string;
+}) {
   return (
     <>
       {messages.map((m, i) => {
+        const prev = messages[i - 1];
         const next = messages[i + 1];
         const gap = next && next.is_from_me === m.is_from_me ? 3 : 10;
-        return <Bubble key={i} m={m} gap={gap} />;
+        const name = !m.is_from_me && senderName
+          && (!prev || prev.is_from_me) ? senderName : undefined;
+        return <Bubble key={i} m={m} gap={gap} name={name} />;
       })}
     </>
   );
@@ -149,7 +165,7 @@ function FinishConvo({ onResult }: { onResult: (ok: boolean) => void }) {
     <div className="game-round">
       <p>What did you actually say next?</p>
       <div style={{ margin: "16px 0" }}>
-        <Bubbles messages={round.context} />
+        <Bubbles messages={round.context} senderName={round.person_name} />
       </div>
       {round.options.map((o, i) => {
         const state: ChoiceState = picked === null ? "idle"
@@ -166,7 +182,8 @@ function FinishConvo({ onResult }: { onResult: (ok: boolean) => void }) {
         <div className="game-reveal" style={{ marginTop: 12 }}>
           <p>That was <b>{round.person_name}</b> — {round.date}.
              {round.aftermath.length > 0 && " And then:"}</p>
-          <Bubbles messages={round.aftermath} />
+          <Bubbles messages={round.aftermath}
+                   senderName={round.person_name} />
           <NextButton onClick={next} />
         </div>
       )}
