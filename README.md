@@ -15,8 +15,6 @@ cd relationships
 ./setup.sh
 ```
 
-That's it. The script does everything else and tells you what it's doing at
-each step:
 
 1. **Installs the tools it needs** (a Python manager called `uv`, and Node.js)
    — only if you don't already have them.
