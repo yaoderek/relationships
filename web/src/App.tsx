@@ -7,7 +7,6 @@ import Language from "./pages/Language";
 import Overview from "./pages/Overview";
 import People from "./pages/People";
 import Person from "./pages/Person";
-import You from "./pages/You";
 
 export default function App() {
   return (
@@ -21,14 +20,12 @@ export default function App() {
           <Link to="/">Overview</Link>
           <Link to="/people">People</Link>
           <Link to="/groups">Groups</Link>
-          <Link to="/you">You</Link>
           <Link to="/language">Language</Link>
           <Link to="/games">Games</Link>
         </nav>
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/people" element={<People />} />
-          <Route path="/you" element={<You />} />
           <Route path="/language" element={<Language />} />
           <Route path="/games" element={<Games />} />
           <Route path="/person/:id" element={<Person />} />

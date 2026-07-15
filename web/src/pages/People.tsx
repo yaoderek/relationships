@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchPersons } from "../api";
 import type { PersonSummary } from "../api";
+import BlobField from "../components/BlobField";
 import Dropdown from "../components/Dropdown";
 import FilterPanel from "../components/FilterPanel";
 import type { RangeDays } from "../components/FilterPanel";
@@ -65,8 +66,19 @@ export default function People() {
     .sort((a, b) => (value(b) ?? -Infinity) - (value(a) ?? -Infinity));
   return (
     <>
-      <Spine sections={[{ id: "people-list", label: "Leaderboard" }]} />
-      <h1 id="people-list">People</h1>
+      <Spine sections={[
+        { id: "people-universe", label: "Universe" },
+        { id: "people-list", label: "Leaderboard" },
+      ]} />
+      <h1 id="people-universe">People</h1>
+      <h2 style={{ marginTop: 8 }}>Your universe</h2>
+      <p style={{ fontSize: 13, opacity: 0.6, marginTop: -6 }}>
+        Each blob is a person, sized by how much you texted around that moment.
+        Drag the timeline or press play.
+      </p>
+      <BlobField />
+
+      <h2 id="people-list">Leaderboard</h2>
       <div style={{ display: "flex", alignItems: "center", gap: 8,
                     margin: "4px 0 12px" }}>
         <span style={{ fontSize: 13, opacity: 0.7 }}>sort by</span>
