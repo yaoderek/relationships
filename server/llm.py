@@ -1,6 +1,9 @@
 import json
 import logging
 import os
+import random
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import httpx
@@ -44,6 +47,96 @@ def load_env_file(path: Path | None = None) -> None:
             continue
         key, _, value = line.partition("=")
         os.environ.setdefault(key.strip(), value.strip())
+
+
+_EMBED_CACHE = Path("data/embed_cache.sqlite")
+
+
+def embed_parallel(texts: list[str], api_key: str, *, model: str, dims: int,
+                   batch: int, workers: int = 4, unit: str = "texts"):
+    """Embed texts with OpenAI, sending `workers` batches concurrently.
+
+    Every finished batch is committed to data/embed_cache.sqlite, so a crash
+    or Ctrl+C loses at most the in-flight batches and a rerun resumes.
+    Returns an L2-normalized float32 array aligned with `texts`.
+    """
+    import hashlib
+    import sqlite3
+
+    import numpy as np
+
+    def key(text: str) -> str:
+        return hashlib.sha1(f"{model}|{dims}|{text}".encode()).hexdigest()
+
+    _EMBED_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    cache = sqlite3.connect(_EMBED_CACHE)
+    cache.execute("PRAGMA journal_mode=WAL")
+    cache.execute("CREATE TABLE IF NOT EXISTS emb (k TEXT PRIMARY KEY, v BLOB)")
+
+    keys = [key(t) for t in texts]
+    out = np.empty((len(texts), dims), dtype=np.float32)
+    wanted = set(keys)
+    found = {k: v for k, v in cache.execute("SELECT k, v FROM emb")
+             if k in wanted}
+    for i, k in enumerate(keys):
+        if k in found:
+            out[i] = np.frombuffer(found[k], dtype=np.float32)
+
+    todo = [i for i, k in enumerate(keys) if k not in found]
+    print(f"  {len(texts) - len(todo):,} {unit} already cached, "
+          f"{len(todo):,} to embed", flush=True)
+    chunks = [todo[s:s + batch] for s in range(0, len(todo), batch)]
+
+    def fetch(idx: list[int]) -> tuple[list[int], list]:
+        payload = {"model": model, "input": [texts[i] for i in idx],
+                   "dimensions": dims}
+        for attempt in range(20):
+            try:
+                with httpx.Client(timeout=180) as client:
+                    r = client.post("https://api.openai.com/v1/embeddings",
+                                    json=payload,
+                                    headers={"Authorization": f"Bearer {api_key}"})
+                r.raise_for_status()
+                return idx, r.json()["data"]
+            except httpx.HTTPError as exc:
+                resp = getattr(exc, "response", None)
+                if resp is not None and "insufficient_quota" in resp.text:
+                    raise  # out of credits — retrying won't help
+                if attempt == 19:
+                    raise
+                # Concurrent batches trip the tokens-per-minute limit; honor
+                # Retry-After and jitter so workers don't retry in lockstep.
+                hinted = resp.headers.get("retry-after") if resp is not None else None
+                wait = float(hinted) if hinted else min(2 ** attempt, 60)
+                wait += random.uniform(0, 1)
+                code = resp.status_code if resp is not None else type(exc).__name__
+                print(f"\n  retry {attempt + 1} after {code}, sleeping {wait:.0f}s",
+                      flush=True)
+                time.sleep(wait)
+        raise AssertionError("unreachable")
+
+    done = len(texts) - len(todo)
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
+        for fut in as_completed([pool.submit(fetch, c) for c in chunks]):
+            idx, data = fut.result()
+            rows = []
+            for item in data:
+                i = idx[item["index"]]
+                out[i] = item["embedding"]
+                rows.append((keys[i], out[i].tobytes()))
+            cache.executemany("INSERT OR REPLACE INTO emb VALUES (?, ?)", rows)
+            cache.commit()
+            done += len(data)
+            print(f"\r  embedded {done:,}/{len(texts):,} {unit}", end="",
+                  flush=True)
+    finally:
+        # On a fatal error, don't keep spending API calls on queued batches.
+        pool.shutdown(wait=True, cancel_futures=True)
+        cache.close()
+    print(flush=True)
+    norms = np.linalg.norm(out, axis=1, keepdims=True)
+    return out / np.maximum(norms, 1e-9)
 
 
 def _read_cache() -> dict:

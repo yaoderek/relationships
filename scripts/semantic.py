@@ -48,7 +48,7 @@ from sklearn.neighbors import NearestNeighbors
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ingest.phrases import log_odds, ngram_counts, tokenize
-from server.llm import load_env_file
+from server.llm import embed_parallel, load_env_file
 from server.stopwords import STOPWORDS
 
 ANALYTICS = Path("data/analytics.duckdb")
@@ -204,33 +204,8 @@ def load_sessions() -> tuple[list[Session], np.ndarray]:
 # ------------------------------------------------------- conversation embeds
 
 def embed_batch(texts: list[str], api_key: str) -> np.ndarray:
-    out = np.empty((len(texts), DIMS), dtype=np.float32)
-    for start in range(0, len(texts), EMBED_BATCH):
-        batch = texts[start:start + EMBED_BATCH]
-        for attempt in range(4):
-            try:
-                r = httpx.post(
-                    "https://api.openai.com/v1/embeddings",
-                    json={"model": EMBED_MODEL, "input": batch,
-                          "dimensions": DIMS},
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    timeout=180)
-                r.raise_for_status()
-                break
-            except Exception as exc:
-                if attempt == 3:
-                    raise
-                wait = 2 ** attempt
-                print(f"  retry {attempt + 1} after {type(exc).__name__}, "
-                      f"sleeping {wait}s", flush=True)
-                time.sleep(wait)
-        for item in r.json()["data"]:
-            out[start + item["index"]] = item["embedding"]
-        done = min(start + EMBED_BATCH, len(texts))
-        if (start // EMBED_BATCH) % 5 == 0 or done == len(texts):
-            print(f"  embedded {done:,}/{len(texts):,} sessions", flush=True)
-    norms = np.linalg.norm(out, axis=1, keepdims=True)
-    return out / np.maximum(norms, 1e-9)
+    return embed_parallel(texts, api_key, model=EMBED_MODEL, dims=DIMS,
+                          batch=EMBED_BATCH, unit="sessions")
 
 
 def conv_embeddings(sessions: list[Session], api_key: str) -> np.ndarray:

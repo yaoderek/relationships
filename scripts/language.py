@@ -6,7 +6,6 @@ and distinctive signature phrases. Run after `python -m ingest`:
 import json
 import os
 import sys
-import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -19,7 +18,7 @@ import umap
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ingest.phrases import log_odds, ngram_counts
-from server.llm import load_env_file
+from server.llm import embed_parallel, load_env_file
 
 ANALYTICS = Path("data/analytics.duckdb")
 OUT = Path("data/language.duckdb")
@@ -41,34 +40,8 @@ EIGEN_KNN = 15
 
 
 def embed_texts(texts: list[str], api_key: str) -> np.ndarray:
-    out = np.empty((len(texts), DIMS), dtype=np.float32)
-    for start in range(0, len(texts), BATCH):
-        batch = [t[:300] for t in texts[start:start + BATCH]]
-        for attempt in range(4):
-            try:
-                r = httpx.post(
-                    "https://api.openai.com/v1/embeddings",
-                    json={"model": EMBED_MODEL, "input": batch,
-                          "dimensions": DIMS},
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    timeout=120,
-                )
-                r.raise_for_status()
-                break
-            except httpx.HTTPError as exc:
-                if attempt == 3:
-                    raise
-                wait = 2 ** attempt
-                print(f"  retry {attempt + 1} after {type(exc).__name__}, "
-                      f"sleeping {wait}s", flush=True)
-                time.sleep(wait)
-        for item in r.json()["data"]:
-            out[start + item["index"]] = item["embedding"]
-        done = min(start + BATCH, len(texts))
-        if (start // BATCH) % 20 == 0 or done == len(texts):
-            print(f"  embedded {done:,}/{len(texts):,}", flush=True)
-    norms = np.linalg.norm(out, axis=1, keepdims=True)
-    return out / np.maximum(norms, 1e-9)
+    return embed_parallel([t[:300] for t in texts], api_key, model=EMBED_MODEL,
+                          dims=DIMS, batch=BATCH)
 
 
 def kmeans(x: np.ndarray, k: int, iters: int = 25, seed: int = 0):
