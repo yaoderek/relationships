@@ -1,6 +1,8 @@
+import os
 from pathlib import Path
 
 import duckdb
+import pyarrow as pa
 
 from .apple_epoch import apple_to_utc
 from .chatdb import RawData
@@ -56,10 +58,15 @@ def resolve_persons(handles, contacts, overrides):
     return persons, handle_person
 
 
-def _insert_rows(con, sql: str, rows: list) -> None:
-    # duckdb's executemany raises on an empty parameter list
-    if rows:
-        con.executemany(sql, rows)
+def _insert_rows(con, table: str, rows: list[tuple]) -> None:
+    # Bulk-load via an Arrow table: executemany binds one row at a time and
+    # takes many minutes on a real chat.db (~500k messages).
+    if not rows:
+        return
+    cols = list(zip(*rows))
+    con.register("_staging", pa.table({f"c{i}": pa.array(c) for i, c in enumerate(cols)}))
+    con.execute(f"INSERT INTO {table} SELECT * FROM _staging")
+    con.unregister("_staging")
 
 
 def _naive_utc(dt):
@@ -110,36 +117,41 @@ def build_analytics_db(out_path: Path, raw: RawData, contacts, overrides=None) -
     assign_sessions(rows)
     compute_response_seconds(rows, is_group)
 
+    # Build into a per-process temp file and rename at the end, so a crash or a
+    # second concurrent ingest never leaves a half-written analytics db behind.
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.unlink(missing_ok=True)
-    con = duckdb.connect(str(out_path))
+    tmp_path = out_path.with_name(f"{out_path.name}.{os.getpid()}.tmp")
+    tmp_path.unlink(missing_ok=True)
+    con = duckdb.connect(str(tmp_path))
     con.execute(_DDL)
-    _insert_rows(con, "INSERT INTO persons VALUES (?,?,?)",
+    _insert_rows(con, "persons",
                  [(p["person_id"], p["display_name"], p["source"]) for p in persons])
-    _insert_rows(con, "INSERT INTO handles VALUES (?,?,?,?)",
+    _insert_rows(con, "handles",
                  [(h["handle_id"], handle_person[h["handle_id"]], h["id"], h["service"])
                   for h in raw.handles])
-    _insert_rows(con, "INSERT INTO chats VALUES (?,?,?,?)",
+    _insert_rows(con, "chats",
                  [(c["chat_id"], c["display_name"], is_group[c["chat_id"]],
                    len(members.get(c["chat_id"], ())))
                   for c in raw.chats])
-    _insert_rows(con, "INSERT INTO chat_members VALUES (?,?)",
+    _insert_rows(con, "chat_members",
                  [(cid, pid) for cid, pids in members.items() for pid in pids])
     _insert_rows(
-        con,
-        """INSERT INTO messages VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        con, "messages",
         [(r["msg_id"], r["guid"], r["chat_id"], r["person_id"], r["is_from_me"],
           _naive_utc(r["ts_utc"]), _naive_local(r["ts_utc"]),
           _naive_utc(r["date_delivered"]), _naive_utc(r["date_read"]),
           r["service"], r["text"], r["char_len"], r["word_count"], r["emoji_count"],
           r["has_attachment"], r["is_audio"], r["thread_originator_guid"],
           r["session_id"], r["response_seconds"]) for r in rows])
-    _insert_rows(con, "INSERT INTO tapbacks VALUES (?,?,?,?,?)",
+    _insert_rows(con, "tapbacks",
                  [(t["target_guid"], handle_person.get(t["handle_id"]),
                    bool(t["is_from_me"]), t["kind"],
                    _naive_utc(apple_to_utc(t["date"]))) for t in raw_tapbacks])
-    _insert_rows(con, "INSERT INTO attachments VALUES (?,?,?)",
+    _insert_rows(con, "attachments",
                  [(a["msg_id"], a["mime_type"], a["total_bytes"])
                   for a in raw.attachments])
-    _insert_rows(con, "INSERT INTO emoji_uses VALUES (?,?)", emoji_rows)
+    _insert_rows(con, "emoji_uses", emoji_rows)
     con.close()
+    # A stale WAL from an interrupted run would be replayed onto the new file.
+    Path(f"{out_path}.wal").unlink(missing_ok=True)
+    os.replace(tmp_path, out_path)
